@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xiaowei Li - Senior Staff Engineer & Tech Lead</title>
+  <meta name="description" content="Personal website of Xiaowei Li - Senior Staff Software Engineer & Tech Lead Manager at Google, specializing in LLM Agent Quality, Function Calling, and Agentic AI.">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Source+Serif+4:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav" id="nav">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">Xiaowei Li</a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+      <ul class="nav-links" id="nav-links">
+        <li><a href="#about">About</a></li>
+        <li><a href="#experience">Experience</a></li>
+        <li><a href="#projects">Projects</a></li>
+        <li><a href="#blog">Blog</a></li>
+        <li><a href="#contact">Contact</a></li>
+        <li><a href="xiaowei_resume.pdf" class="btn btn-sm" target="_blank">Resume</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <header class="hero" id="hero">
+    <div class="container">
+      <div class="hero-content">
+        <p class="hero-greeting">Hello, I'm</p>
+        <h1 class="hero-name">Xiaowei Li</h1>
+        <h2 class="hero-title">Senior Staff Software Engineer & Tech Lead Manager</h2>
+        <p class="hero-subtitle">
+          Building the future of AI agents at Google. Core contributor to Gemini,
+          specializing in LLM post-training for tool use, function calling, and agentic capabilities.
+        </p>
+        <div class="hero-actions">
+          <a href="#experience" class="btn btn-primary">View My Work</a>
+          <a href="#contact" class="btn btn-outline">Get in Touch</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- About Section -->
+  <section class="section" id="about">
+    <div class="container">
+      <h2 class="section-title">About Me</h2>
+      <div class="about-grid">
+        <div class="about-text">
+          <p>
+            I'm a Senior Staff Software Engineer & Tech Lead Manager at Google Cloud AI,
+            where I work on Gemini and Agent Quality. With a Ph.D. in Computer Science from
+            Vanderbilt University and over a decade of industry experience, I specialize in
+            building enterprise-grade AI systems at scale.
+          </p>
+          <p>
+            My work spans the full stack of LLM agent development -- from post-training models
+            for function calling and tool use, to building evaluation benchmarks, agentic orchestration
+            frameworks, and simulation/optimization systems. I've contributed to every major version
+            of Gemini (1.0 through 3.0).
+          </p>
+          <p>
+            Before Google Cloud AI, I led engineering efforts at Roblox, Waymo, and Google Ads,
+            architecting global-scale distributed services and ML data platforms.
+          </p>
+        </div>
+        <div class="about-highlights">
+          <div class="highlight-card">
+            <span class="highlight-number">10+</span>
+            <span class="highlight-label">Years of Experience</span>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-number">Gemini</span>
+            <span class="highlight-label">1.0 - 3.0 Contributor</span>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-number">Ph.D.</span>
+            <span class="highlight-label">Computer Science, Vanderbilt</span>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-number">Award</span>
+            <span class="highlight-label">Google Cloud Tech Impact</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Experience Section -->
+  <section class="section section-alt" id="experience">
+    <div class="container">
+      <h2 class="section-title">Professional Experience</h2>
+      <div class="timeline">
+
+        <!-- Google Cloud AI -->
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <div class="timeline-header">
+              <div>
+                <h3 class="timeline-company">Google, Cloud AI (Gemini & Agent Quality)</h3>
+                <p class="timeline-role">Senior Staff Software Engineer & Tech Lead Manager</p>
+              </div>
+              <div class="timeline-meta">
+                <span class="timeline-location">Mountain View, CA</span>
+                <span class="timeline-date">Oct 2023 - Present</span>
+              </div>
+            </div>
+            <ul class="timeline-details">
+              <li>Core Contributor to Gemini 1.0, 1.5, 2.0, 2.5, and 3.0, focusing on function calling, tool use, and agentic capabilities</li>
+              <li>Founding engineer for launching Gemini Function Calling on Vertex AI and AI Studio</li>
+              <li>Creator of Google's 1st Enterprise Agentic Evaluation Benchmark, won the Google Cloud Tech Impact Award</li>
+              <li>Co-initiator and Quality Tech Lead of Gemini Enterprise (GCP's flagship agentic platform); launched the core agentic orchestrator and Deep Research agent</li>
+              <li>Technical Lead for Vertex Agent Builder Quality (ADK/Agent Engine), delivering advanced agent evaluation, simulation, and optimization features</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Roblox -->
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <div class="timeline-header">
+              <div>
+                <h3 class="timeline-company">Roblox</h3>
+                <p class="timeline-role">Principal Software Engineer & Tech Lead</p>
+              </div>
+              <div class="timeline-meta">
+                <span class="timeline-location">San Mateo, CA</span>
+                <span class="timeline-date">May 2022 - Sept 2023</span>
+              </div>
+            </div>
+            <ul class="timeline-details">
+              <li>Architected a new-generation caching control plane designed to handle massive ML inference and non-ML traffic concurrently</li>
+              <li>Elevated end-to-end system reliability to 5 nines (99.999%)</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Waymo -->
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <div class="timeline-header">
+              <div>
+                <h3 class="timeline-company">Waymo (Perception)</h3>
+                <p class="timeline-role">Staff Software Engineer & Tech Lead</p>
+              </div>
+              <div class="timeline-meta">
+                <span class="timeline-location">Mountain View, CA</span>
+                <span class="timeline-date">Oct 2018 - Apr 2022</span>
+              </div>
+            </div>
+            <ul class="timeline-details">
+              <li>Developed in-house offboard ML models and productionized an Automated Labeling System to generate high-quality perception labels at scale</li>
+              <li>Designed and built a semantic embedding based Data Mining & Discovery Platform indexing billions of miles of driving logs</li>
+              <li>Built a highly efficient E2E perception evaluation pipeline supporting rapid model iterations for 100+ ML engineers</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Google Ads -->
+        <div class="timeline-item">
+          <div class="timeline-marker"></div>
+          <div class="timeline-content">
+            <div class="timeline-header">
+              <div>
+                <h3 class="timeline-company">Google (Ads Data Infra)</h3>
+                <p class="timeline-role">Senior Software Engineer</p>
+              </div>
+              <div class="timeline-meta">
+                <span class="timeline-location">Mountain View, CA</span>
+                <span class="timeline-date">Jun 2013 - Sept 2018</span>
+              </div>
+            </div>
+            <ul class="timeline-details">
+              <li>Founding engineer of Datahub: co-designed a global-scale metadata management service supporting GCP Data Lake and Google-internal OLAP engines</li>
+              <li>Built a highly scalable, low-latency payment processing service handling millions of transactions daily</li>
+              <li>Developed a resilient ML-based anomaly detection system for real-time traffic pattern analysis</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Projects Section -->
+  <section class="section" id="projects">
+    <div class="container">
+      <h2 class="section-title">Notable Projects</h2>
+      <div class="projects-grid">
+
+        <div class="project-card">
+          <div class="project-tag">Google Cloud AI</div>
+          <h3 class="project-title">Gemini Function Calling</h3>
+          <p class="project-desc">
+            Founding engineer for launching Gemini Function Calling on Vertex AI and AI Studio.
+            Enables developers to connect LLMs to external tools and APIs through structured function definitions.
+          </p>
+          <div class="project-tech">
+            <span>LLM</span><span>Function Calling</span><span>Vertex AI</span><span>AI Studio</span>
+          </div>
+        </div>
+
+        <div class="project-card">
+          <div class="project-tag">Google Cloud AI</div>
+          <h3 class="project-title">Enterprise Agentic Evaluation Benchmark</h3>
+          <p class="project-desc">
+            Created Google's first Enterprise Agentic Evaluation Benchmark for systematically measuring
+            agent quality. Won the Google Cloud Tech Impact Award.
+          </p>
+          <div class="project-tech">
+            <span>Agent Eval</span><span>Benchmarking</span><span>Quality</span>
+          </div>
+        </div>
+
+        <div class="project-card">
+          <div class="project-tag">Google Cloud AI</div>
+          <h3 class="project-title">Vertex Agent Builder Quality</h3>
+          <p class="project-desc">
+            Technical Lead for ADK/Agent Engine quality, delivering SOTA Autoraters for agent evaluation,
+            user/environment simulators, and continuous learning optimization features.
+          </p>
+          <div class="project-tech">
+            <span>ADK</span><span>Agent Engine</span><span>Autoraters</span><span>Simulation</span>
+          </div>
+        </div>
+
+        <div class="project-card">
+          <div class="project-tag">Waymo</div>
+          <h3 class="project-title">Automated Labeling System</h3>
+          <p class="project-desc">
+            Built an automated labeling system using offboard ML models to generate high-quality
+            perception labels at scale, significantly reducing manual labeling costs.
+          </p>
+          <div class="project-tech">
+            <span>ML</span><span>Perception</span><span>Autonomous Driving</span>
+          </div>
+        </div>
+
+        <div class="project-card">
+          <div class="project-tag">Waymo</div>
+          <h3 class="project-title">Data Mining & Discovery Platform</h3>
+          <p class="project-desc">
+            Designed a semantic embedding based platform indexing billions of miles of driving logs,
+            enabling rapid discovery of rare events for 200+ engineers.
+          </p>
+          <div class="project-tech">
+            <span>Embeddings</span><span>Data Mining</span><span>Search</span>
+          </div>
+        </div>
+
+        <div class="project-card">
+          <div class="project-tag">Google Ads</div>
+          <h3 class="project-title">Datahub</h3>
+          <p class="project-desc">
+            Co-designed a global-scale metadata management service supporting GCP Data Lake
+            and Google-internal OLAP engines (F1, Dremel) with millisecond-level latency.
+          </p>
+          <div class="project-tech">
+            <span>Metadata</span><span>Data Lake</span><span>OLAP</span><span>Governance</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Blog Section -->
+  <section class="section section-alt" id="blog">
+    <div class="container">
+      <h2 class="section-title">Blog</h2>
+      <p class="section-subtitle">Thoughts on AI, engineering, and technology</p>
+      <div class="blog-grid">
+
+        <a href="blog/building-ai-agents.html" class="blog-card">
+          <div class="blog-date">Coming Soon</div>
+          <h3 class="blog-title">Building Reliable AI Agents: Lessons from Gemini</h3>
+          <p class="blog-excerpt">
+            Reflections on what it takes to build production-grade AI agents that can reliably
+            use tools and function calling at enterprise scale.
+          </p>
+          <span class="blog-read-more">Read more &rarr;</span>
+        </a>
+
+        <a href="blog/eval-benchmarks.html" class="blog-card">
+          <div class="blog-date">Coming Soon</div>
+          <h3 class="blog-title">The Art of Evaluating AI Agents</h3>
+          <p class="blog-excerpt">
+            How do you measure the quality of an AI agent? A deep dive into evaluation
+            methodologies, benchmarks, and autoraters.
+          </p>
+          <span class="blog-read-more">Read more &rarr;</span>
+        </a>
+
+        <a href="blog/scaling-ml-platforms.html" class="blog-card">
+          <div class="blog-date">Coming Soon</div>
+          <h3 class="blog-title">Scaling ML Platforms: From Waymo to Google Cloud</h3>
+          <p class="blog-excerpt">
+            Lessons learned from building ML data platforms that serve hundreds of engineers
+            across autonomous driving and cloud AI.
+          </p>
+          <span class="blog-read-more">Read more &rarr;</span>
+        </a>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Education Section -->
+  <section class="section" id="education">
+    <div class="container">
+      <h2 class="section-title">Education</h2>
+      <div class="education-card">
+        <div class="education-header">
+          <div>
+            <h3 class="education-school">Vanderbilt University</h3>
+            <p class="education-degree">Ph.D. in Computer Science</p>
+          </div>
+          <div class="timeline-meta">
+            <span class="timeline-location">Nashville, TN</span>
+            <span class="timeline-date">2008 - 2013</span>
+          </div>
+        </div>
+        <p class="education-desc">
+          Research Assistant affiliated with the NSF TRUST center. Conducted research using ML techniques
+          to detect access control flaws and attacks targeting Web Applications and Medical EMR systems.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Section -->
+  <section class="section section-alt" id="contact">
+    <div class="container">
+      <h2 class="section-title">Get in Touch</h2>
+      <p class="section-subtitle">
+        I'm always interested in discussing AI agents, LLM quality, and engineering challenges.
+        Feel free to reach out.
+      </p>
+      <div class="contact-links">
+        <a href="mailto:lixwbupt@gmail.com" class="contact-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          <span>lixwbupt@gmail.com</span>
+        </a>
+        <a href="https://www.linkedin.com/in/xiaowei-li-b37a5a18/" target="_blank" class="contact-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg>
+          <span>LinkedIn</span>
+        </a>
+        <a href="https://github.com/vandyvilla" target="_blank" class="contact-item">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>&copy; 2026 Xiaowei Li. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
