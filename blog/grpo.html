@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A Practical GRPO Reference: Metrics to Watch and Configs to Tune</title>
+<meta name="description" content="A field reference for training language models with GRPO — every metric worth logging (with healthy/abnormal shapes and fixes) and every configuration knob (with ranges and when to turn it).">
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1f2328;
+    --muted: #59636e;
+    --border: #d1d9e0;
+    --border-soft: #e4e8ec;
+    --accent: #0969da;
+    --code-bg: #f4f6f8;
+    --code-fg: #b3266b;
+    --table-head: #f3f5f7;
+    --row-alt: #fafbfc;
+    --good: #e8f5ec;
+    --good-bd: #add7bb;
+    --bad: #fdecec;
+    --bad-bd: #f0b8b8;
+    --fix: #eef3fb;
+    --fix-bd: #bcd2f0;
+    --note-bg: #fff8e6;
+    --note-bd: #f0d999;
+    --maxw: 1180px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+      --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
+      --code-fg: #ff7bbf; --table-head: #161b22; --row-alt: #11161d;
+      --good: #122119; --good-bd: #2a5a3b; --bad: #2a1517; --bad-bd: #6e2b2b;
+      --fix: #11203a; --fix-bd: #1f487e; --note-bg: #241c08; --note-bd: #5c4813;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+          Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  h1, h2, h3 { line-height: 1.25; font-weight: 650; scroll-margin-top: 20px; }
+  h1 {
+    font-size: 2.0rem; margin: 2.4em 0 0.6em;
+    padding-bottom: .3em; border-bottom: 2px solid var(--border);
+  }
+  h1:first-of-type { margin-top: 0.2em; }
+  h2 {
+    font-size: 1.4rem; margin: 2em 0 0.5em; padding-bottom: .25em;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  h3 { font-size: 1.12rem; margin: 1.6em 0 0.4em; }
+  p { margin: 0.7em 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .headerlink { visibility: hidden; margin-left: .35em; color: var(--muted); font-weight: 400; }
+  h1:hover .headerlink, h2:hover .headerlink, h3:hover .headerlink { visibility: visible; }
+  code {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: .15em .4em; border-radius: 5px; font-size: .88em;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border-soft);
+    padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+  }
+  pre code { background: none; color: var(--fg); padding: 0; }
+  hr { border: none; border-top: 1px solid var(--border-soft); margin: 2.2em 0; }
+  blockquote {
+    margin: 1em 0; padding: .2em 1.1em; color: var(--muted);
+    border-left: 3px solid var(--border);
+  }
+  em { color: var(--fg); }
+
+  /* ---- title block ---- */
+  .doc-title { font-size: 2.3rem; border: none; margin: 0 0 .1em; padding: 0; }
+  .doc-desc { color: var(--muted); font-size: 1.05rem; margin: 0 0 1.4em; }
+
+  /* ---- table of contents ---- */
+  .toc {
+    background: var(--row-alt); border: 1px solid var(--border-soft);
+    border-radius: 10px; padding: 14px 22px; margin: 1.5em 0 2.4em;
+  }
+  .toc > ul { margin: 0; padding-left: 1.1em; }
+  .toc ul { list-style: none; padding-left: 1.1em; }
+  .toc > ul > li { margin: .35em 0; font-weight: 600; }
+  .toc ul ul li { font-weight: 400; font-size: .95em; }
+  .toc a { color: var(--fg); }
+  .toc a:hover { color: var(--accent); }
+  .toctitle { font-weight: 700; font-size: 1.05rem; margin: 0 0 .4em; }
+
+  /* ---- tables ---- */
+  .tablewrap { overflow-x: auto; margin: 1.1em 0 1.6em;
+    border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 760px; }
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--table-head); text-align: left; font-weight: 650;
+    padding: 11px 14px; border-bottom: 2px solid var(--border);
+    vertical-align: bottom;
+  }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border-soft);
+    vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody td:first-child { font-weight: 600; white-space: normal; }
+  tbody tr:last-child td { border-bottom: none; }
+  table code { font-size: .82em; white-space: nowrap; }
+
+  /* tint expected/abnormal/mitigation columns when present (5-col & 4-col tables) */
+  .t5 td:nth-child(3) { background: color-mix(in srgb, var(--good) 55%, transparent); }
+  .t5 td:nth-child(4) { background: color-mix(in srgb, var(--bad) 55%, transparent); }
+  .t5 td:nth-child(5) { background: color-mix(in srgb, var(--fix) 55%, transparent); }
+  .t4 td:nth-child(3) { background: color-mix(in srgb, var(--good) 55%, transparent); }
+  .t4 td:nth-child(4) { background: color-mix(in srgb, var(--fix) 55%, transparent); }
+
+  .footer { margin-top: 3em; padding-top: 1.4em; border-top: 1px solid var(--border-soft);
+    color: var(--muted); font-size: .9rem; }
+  @media (max-width: 640px) {
+    .wrap { padding: 28px 14px 64px; }
+    .doc-title { font-size: 1.7rem; }
+    h1 { font-size: 1.6rem; } h2 { font-size: 1.25rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="doc-title">A Practical GRPO Reference: Metrics to Watch and Configs to Tune</h1>
+  <p class="doc-desc">A field reference for training language models with GRPO — every metric worth logging (with healthy/abnormal shapes and fixes) and every configuration knob (with ranges and when to turn it).</p>
+  <p><em>Group Relative Policy Optimization (GRPO) replaces PPO's learned value critic with a
+group-relative advantage: sample several completions per prompt, and score each one
+against its group's mean. That makes it cheaper and simpler — but it also introduces
+failure modes you only catch if you're watching the right signals. This post is the
+reference I keep open during runs: the metrics worth logging, and the configuration knobs
+worth tuning, each tied to the symptom that tells you to act.</em></p>
+<p>The two halves are cross-referenced: when a metric goes abnormal, the "Mitigation" column
+names a knob; the configuration table's "When to adjust" column names the symptom. Read
+them together.</p>
+<div class="toc">
+<ul>
+<li><a href="#part-1-metrics-to-watch-during-training">Part 1 — Metrics to watch during training</a><ul>
+<li><a href="#1-reward-task-performance-metrics">1. Reward &amp; task-performance metrics</a></li>
+<li><a href="#2-grpo-specific-group-signals">2. GRPO-specific group signals</a></li>
+<li><a href="#3-policy-divergence-metrics">3. Policy-divergence metrics</a></li>
+<li><a href="#4-exploration-metrics">4. Exploration metrics</a></li>
+<li><a href="#5-ppo-surrogate-mechanics">5. PPO surrogate mechanics</a></li>
+<li><a href="#6-optimization-metrics">6. Optimization metrics</a></li>
+<li><a href="#7-generation-output-quality-metrics">7. Generation &amp; output-quality metrics</a></li>
+<li><a href="#cross-cutting-debugging-heuristics">Cross-cutting debugging heuristics</a></li>
+</ul>
+</li>
+<li><a href="#part-2-configuration-parameters-to-tune">Part 2 — Configuration parameters to tune</a><ul>
+<li><a href="#1-rollout-sampling">1. Rollout &amp; sampling</a></li>
+<li><a href="#2-advantage-computation-grpo-core">2. Advantage computation (GRPO core)</a></li>
+<li><a href="#3-ppo-surrogate-trust-region">3. PPO surrogate &amp; trust region</a></li>
+<li><a href="#4-kl-penalty-reference-policy">4. KL penalty &amp; reference policy</a></li>
+<li><a href="#5-exploration-entropy">5. Exploration (entropy)</a></li>
+<li><a href="#6-optimization-schedule">6. Optimization &amp; schedule</a></li>
+<li><a href="#7-reward-configuration">7. Reward configuration</a></li>
+<li><a href="#8-variant-specific-knobs-dapo-dr-grpo-dynamic-sampling">8. Variant-specific knobs (DAPO / Dr. GRPO / dynamic sampling)</a></li>
+<li><a href="#quick-starting-point-verifiable-reward-grpo-on-a-pretrained-llm">Quick starting point (verifiable-reward GRPO on a pretrained LLM)</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<hr />
+<h1 id="part-1-metrics-to-watch-during-training">Part 1 — Metrics to watch during training<a class="headerlink" href="#part-1-metrics-to-watch-during-training" title="Permanent link">¶</a></h1>
+<p>A reference for what to log during GRPO training, what each signal means, the shape it
+should take when training is healthy, and what to do when it isn't. Organized by category.
+"Old policy" = the policy that generated the current rollout batch; "reference" = the frozen
+anchor (usually the SFT checkpoint) used for the KL penalty.</p>
+<hr />
+<h2 id="1-reward-task-performance-metrics">1. Reward &amp; task-performance metrics<a class="headerlink" href="#1-reward-task-performance-metrics" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Mean reward</strong> (batch / group)</td>
+<td>Average programmatic reward over all sampled completions. The headline objective.</td>
+<td>Rises from baseline, then plateaus near the reward ceiling. Noisy but trending up.</td>
+<td>(a) Flat at baseline. (b) Rises then collapses. (c) Climbs while task quality stagnates.</td>
+<td>(a) Reward too sparse / verifier broken → add shaping, check verifier on hand-written samples. (b) Instability → lower lr, raise <code>kl_beta</code>, fewer inner epochs. (c) Reward hacking → see eval-gap row.</td>
+</tr>
+<tr>
+<td><strong>Task accuracy / pass rate</strong> (held-out)</td>
+<td>Independent correctness metric on a fixed eval set, <strong>not</strong> the training reward.</td>
+<td>Tracks mean reward upward; plateaus at task ceiling.</td>
+<td>Diverges <em>below</em> reward (reward up, accuracy flat/down).</td>
+<td>Reward hacking — the reward has an exploit. Patch the verifier, read high-scoring rollouts, add anti-exploit penalties.</td>
+</tr>
+<tr>
+<td><strong>pass@k</strong> (k&gt;1)</td>
+<td>Fraction of prompts solved by <em>at least one</em> of k samples. Measures retained diversity/coverage.</td>
+<td>Rises; stays meaningfully above pass@1.</td>
+<td>Collapses toward pass@1.</td>
+<td>Diversity collapse / over-exploitation. Raise entropy bonus, increase sampling temperature, lower <code>kl_beta</code> cautiously, reduce inner epochs.</td>
+</tr>
+<tr>
+<td><strong>Reward-component breakdown</strong></td>
+<td>Each additive reward term logged separately (e.g. format vs. correctness vs. length penalty).</td>
+<td>Each component improves in a sensible order (e.g. format saturates first, then correctness).</td>
+<td>One easy component saturates while the hard one never moves.</td>
+<td>Sparse-reward local optimum (the easy term is a "safe harbor"). Densify the hard term (graded credit), curriculum, or SFT warm-start.</td>
+</tr>
+<tr>
+<td><strong>Reward std (within batch)</strong></td>
+<td>Spread of rewards across all completions in the step.</td>
+<td>Moderate early (lots to learn), shrinks as policy converges.</td>
+<td>Near zero from the start.</td>
+<td>No learning signal anywhere: all completions score alike. Raise temperature / group size, fix/shape reward, warm-start.</td>
+</tr>
+<tr>
+<td><strong>Train–eval reward gap</strong></td>
+<td>Difference between training reward and held-out eval reward.</td>
+<td>Small and stable.</td>
+<td>Widens over training.</td>
+<td>Overfitting to the reward model / verifier quirks. Regularize (KL), refresh/ensemble the reward model, add held-out early stopping.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-grpo-specific-group-signals">2. GRPO-specific group signals<a class="headerlink" href="#2-grpo-specific-group-signals" title="Permanent link">¶</a></h2>
+<p>These are the metrics unique to GRPO's critic-free, group-relative design. Watch them closely —
+they explain <em>why</em> the gradient is or isn't flowing.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Advantage mean</strong></td>
+<td>Mean of group-normalized advantages. Should be ≈0 by construction (centered per group).</td>
+<td>Flat at ≈0 throughout.</td>
+<td>Persistently nonzero / drifting.</td>
+<td>Bug in centering (wrong group axis, leaked padding tokens into the mean). Audit the advantage computation.</td>
+</tr>
+<tr>
+<td><strong>Advantage std</strong></td>
+<td>Spread of advantages across the batch — the effective gradient magnitude.</td>
+<td>Rises while there's much to learn, decays toward 0 at convergence.</td>
+<td>≈0 from step one.</td>
+<td>Groups have no internal reward contrast. Raise temperature / group size, densify reward.</td>
+</tr>
+<tr>
+<td><strong>Fraction of zero-variance groups</strong></td>
+<td>Share of prompts where all G completions earn the <em>same</em> reward (advantage ≡ 0, no gradient). <strong>GRPO's most underrated metric.</strong></td>
+<td>Low early; rises toward 1.0 <em>as accuracy reaches ceiling</em> (= genuine convergence).</td>
+<td>Rises toward 1.0 <em>while accuracy is mediocre</em>.</td>
+<td>Learning has silently died: policy confidently commits to one (wrong) answer per prompt. Raise entropy bonus + temperature, increase G, densify reward, sync/relax reference.</td>
+</tr>
+<tr>
+<td><strong>Group size effective coverage</strong></td>
+<td>Mean number of <em>distinct</em> completions per group (diversity within a group).</td>
+<td>Stays well above 1; only shrinks near convergence.</td>
+<td>Collapses to ~1 early.</td>
+<td>Premature determinism. Higher temperature, entropy bonus, larger G.</td>
+</tr>
+<tr>
+<td><strong>Reward range per group</strong> (max−min)</td>
+<td>Whether each group contains both good and bad samples to contrast.</td>
+<td>Healthy spread for most groups.</td>
+<td>Most groups flat.</td>
+<td>Same as zero-variance groups — the contrast that drives GRPO is gone.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-policy-divergence-metrics">3. Policy-divergence metrics<a class="headerlink" href="#3-policy-divergence-metrics" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>KL(policy ‖ reference)</strong></td>
+<td>How far the policy has moved from the frozen anchor. The leash. Use the unbiased non-negative <strong>k3</strong> estimator: <code>exp(r−l) − (r−l) − 1</code>.</td>
+<td>Spikes during fast learning, then settles to a small steady value.</td>
+<td>(a) Monotonic unbounded growth. (b) Pinned at ≈0 while reward is flat.</td>
+<td>(a) Policy running away → raise <code>kl_beta</code>, lower lr, fewer inner epochs. (b) Leash too tight, learning frozen → lower <code>kl_beta</code>, or sync the reference forward (from-scratch setting).</td>
+</tr>
+<tr>
+<td><strong>Approx KL(policy ‖ old)</strong></td>
+<td>Per-update off-policyness between current and rollout policy (PPO's internal KL).</td>
+<td>Small, bounded within a step's inner epochs.</td>
+<td>Grows across inner epochs / between steps.</td>
+<td>Rollouts too stale. Reduce <code>inner_epochs</code>, shrink <code>clip_eps</code>, regenerate rollouts more often (smaller batch reuse).</td>
+</tr>
+<tr>
+<td><strong>Negative-KL fraction</strong></td>
+<td>Share of tokens where a naive <code>r−l</code> KL estimate goes negative (variance diagnostic).</td>
+<td>≈0 with the k3 estimator.</td>
+<td>Frequent with a naive estimator.</td>
+<td>Switch to k3 estimator; high values also flag very off-policy updates.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-exploration-metrics">4. Exploration metrics<a class="headerlink" href="#4-exploration-metrics" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Policy entropy</strong></td>
+<td>Average next-token entropy of the policy distribution — exploration pressure.</td>
+<td>Decays <em>gradually</em> as the policy sharpens around good outputs.</td>
+<td>(a) Cliff to ≈0 in early training. (b) Stuck high / rising.</td>
+<td>(a) Premature entropy collapse → entropy bonus (annealed high→low), higher temperature, lr decay. (b) No convergence / reward too flat → check reward signal; reduce entropy bonus if over-applied.</td>
+</tr>
+<tr>
+<td><strong>Per-position entropy</strong></td>
+<td>Entropy broken down by token position in the completion.</td>
+<td>Sensible profile (e.g. higher at decision points, low at forced tokens).</td>
+<td>Uniformly collapsed, or pathologically high at answer tokens.</td>
+<td>Localizes where exploration died; tune temperature/bonus, inspect those positions' rollouts.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-ppo-surrogate-mechanics">5. PPO surrogate mechanics<a class="headerlink" href="#5-ppo-surrogate-mechanics" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Importance ratio</strong> ρ = π/π_old (mean / max)</td>
+<td>How far each update has moved per-token probabilities from the rollout policy.</td>
+<td>Mean ≈1; max bounded (within a small multiple).</td>
+<td>Mean drifts from 1; max explodes (e.g. &gt;10).</td>
+<td>Updates too aggressive / rollouts stale. Lower lr, fewer inner epochs, tighter <code>clip_eps</code>. Huge max-ratio often means a numerical/log-prob masking bug.</td>
+</tr>
+<tr>
+<td><strong>Clip fraction</strong></td>
+<td>Fraction of tokens whose ratio hit the <code>1±clip_eps</code> boundary (gradient clipped).</td>
+<td>Low single-digit %, stable. With <code>inner_epochs=1</code> it's ≈0 and uninformative.</td>
+<td>Sustained spikes / large fraction.</td>
+<td>Updates exceeding the trust region. Lower lr, fewer inner epochs, or accept a smaller <code>clip_eps</code>. Isolated spike on resume = fresh optimizer moments.</td>
+</tr>
+<tr>
+<td><strong>Surrogate loss</strong></td>
+<td>The clipped policy-gradient objective term itself.</td>
+<td>Trends consistent with reward improvement; noisy.</td>
+<td>Diverges to large magnitude / NaN.</td>
+<td>Numerical instability. Grad clipping, lower lr, check for inf/NaN in log-probs (masking, empty completions).</td>
+</tr>
+<tr>
+<td><strong>Fraction of tokens with zero gradient</strong></td>
+<td>Share of completion tokens contributing no gradient (clipped on the wrong side, or zero advantage).</td>
+<td>Modest.</td>
+<td>Large.</td>
+<td>Combined effect of zero-variance groups + clipping; revisit reward contrast and trust-region width.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-optimization-metrics">6. Optimization metrics<a class="headerlink" href="#6-optimization-metrics" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Total loss</strong></td>
+<td>Full GRPO objective: −surrogate + β·KL − α·entropy.</td>
+<td>Noisy; not necessarily monotone (it's an RL objective, not supervised).</td>
+<td>Marches deterministically to the <em>worst</em> possible value; or NaN.</td>
+<td>A determined move toward worst-case reward usually means a <strong>sign error</strong> in the loss/advantage/gradient. Verify loss drops on a frozen batch; check a known-good sample's log-prob rises after one update. NaN → grad clip + lower lr.</td>
+</tr>
+<tr>
+<td><strong>Gradient norm (pre-clip)</strong></td>
+<td>Magnitude of the raw gradient before clipping.</td>
+<td>Bounded; roughly tracks the lr schedule; spikes early then settles.</td>
+<td>(a) Repeated spikes. (b) ≈0.</td>
+<td>(a) Instability → grad clipping (<code>max_grad_norm</code>), lower lr. (b) No signal reaching params → check advantage std, masking, and that grads aren't all clipped away.</td>
+</tr>
+<tr>
+<td><strong>Gradient-clip frequency</strong></td>
+<td>How often the global grad norm exceeds the clip threshold.</td>
+<td>Occasional early, rare later.</td>
+<td>Almost every step.</td>
+<td>Threshold too low <em>or</em> genuine instability. Raise threshold modestly; if instability, lower lr / fewer inner epochs.</td>
+</tr>
+<tr>
+<td><strong>Learning rate</strong></td>
+<td>The scheduled lr (log it even though it's not learned).</td>
+<td>Follows your warmup/decay schedule.</td>
+<td>Flat when you intended decay; discontinuities.</td>
+<td>Verify scheduler is stepping; discontinuities on resume = scheduler/optimizer state not restored.</td>
+</tr>
+<tr>
+<td><strong>Parameter / update norm ratio</strong></td>
+<td>‖update‖ / ‖params‖ per step.</td>
+<td>Small and stable (e.g. ~1e-3).</td>
+<td>Large or growing.</td>
+<td>Effective step size too big. Lower lr; check optimizer state restored correctly after checkpoints.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-generation-output-quality-metrics">7. Generation &amp; output-quality metrics<a class="headerlink" href="#7-generation-output-quality-metrics" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>What it measures</th>
+<th>Expected (healthy) shape</th>
+<th>Abnormal shape</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Mean response length</strong></td>
+<td>Average completion length in tokens.</td>
+<td>Stable / task-appropriate.</td>
+<td>Drifting upward over training.</td>
+<td>Classic <strong>length-bias reward hacking</strong> (longer = higher reward by artifact). Length-normalize the reward/advantage, add a length penalty, audit the reward model.</td>
+</tr>
+<tr>
+<td><strong>Truncation rate</strong></td>
+<td>Fraction of completions hitting <code>max_new_tokens</code> without EOS.</td>
+<td>Low and stable.</td>
+<td>Rising.</td>
+<td>Policy learning to run on (often tied to length hacking). Raise max length to confirm it's not a cap artifact, then penalize non-termination / length.</td>
+</tr>
+<tr>
+<td><strong>EOS / completion rate</strong></td>
+<td>Fraction of well-formed, properly terminated outputs.</td>
+<td>Rises early, saturates near 1.</td>
+<td>Stuck low.</td>
+<td>Format not being learned. Add a format reward component, SFT warm-start, inspect rollouts.</td>
+</tr>
+<tr>
+<td><strong>Repetition / n-gram diversity</strong></td>
+<td>Degenerate repetition within or across completions (e.g. distinct-n, repeat rate).</td>
+<td>Low repetition, healthy diversity.</td>
+<td>Rising repetition, diversity collapse.</td>
+<td>Reward exploit via repetition, or entropy collapse. Add repetition penalty, raise entropy bonus/temperature, check reward model isn't rewarding boilerplate.</td>
+</tr>
+<tr>
+<td><strong>Output-distribution drift</strong></td>
+<td>Qualitative read of <em>actual</em> sampled completions over time (not a scalar).</td>
+<td>Coherent, on-task, varied.</td>
+<td>Subtly gaming the reward, mode-collapsed, off-task.</td>
+<td><strong>Always read raw rollouts</strong> — curves hide exploits and local optima that a glance at outputs reveals instantly. Adjust reward/verifier accordingly.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="cross-cutting-debugging-heuristics">Cross-cutting debugging heuristics<a class="headerlink" href="#cross-cutting-debugging-heuristics" title="Permanent link">¶</a></h2>
+<ul>
+<li><strong>Read the rollouts, not just the curves.</strong> Many failure modes (reward hacking, format
+  local optima, repetition) are invisible in scalar metrics but obvious in 10 sampled outputs.</li>
+<li><strong>Reward → its minimum, deterministically</strong> = sign error in loss/advantage/gradient.</li>
+<li><strong>Reward up, eval flat/down</strong> = reward hacking; trust the independent eval, fix the reward.</li>
+<li><strong>Plateau + entropy≈0 + zero-variance groups rising + mediocre accuracy</strong> = premature
+  collapse; inject exploration (entropy bonus, temperature, larger G) and/or densify reward.</li>
+<li><strong>KL exploding / clip fraction spiking / ratio max blowing up</strong> = updates too off-policy;
+  lower lr, fewer inner epochs, tighter clip, stronger/relaxed KL as appropriate.</li>
+<li><strong>Supervised capacity probe:</strong> if RL stalls, train the same network supervised on the same
+  task briefly. ~100% supervised ⇒ the bottleneck is exploration/reward, not model capacity.</li>
+</ul>
+<hr />
+<h1 id="part-2-configuration-parameters-to-tune">Part 2 — Configuration parameters to tune<a class="headerlink" href="#part-2-configuration-parameters-to-tune" title="Permanent link">¶</a></h1>
+<p>Every knob that matters for GRPO, organized by subsystem: what it does, a normal value range,
+and the signal that tells you it's time to change it. Ranges assume the common setting of
+<strong>fine-tuning a pretrained LLM</strong> unless noted; from-scratch toy training (like the notebook
+demo) often uses larger LRs and entropy bonuses. Watch the metrics in the companion metrics
+sheet to decide <em>when</em> to turn each of these.</p>
+<hr />
+<h2 id="1-rollout-sampling">1. Rollout &amp; sampling<a class="headerlink" href="#1-rollout-sampling" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>group_size</strong> (G, <code>num_generations</code>)</td>
+<td>Completions sampled per prompt; the population the group-relative advantage is computed over. Larger G = lower-variance advantage estimates and more exploration, at linear compute cost.</td>
+<td>4–64 (commonly 8–16; DeepSeekMath used 64)</td>
+<td>Raise when zero-variance-group fraction is high or advantage std is low (groups lack contrast). Lower to cut rollout cost if groups already show healthy spread.</td>
+</tr>
+<tr>
+<td><strong>prompts_per_step</strong></td>
+<td>Distinct prompts per optimization step. With G, sets effective batch = prompts × G. Controls gradient-estimate stability across tasks.</td>
+<td>8–256+ (hardware-bound)</td>
+<td>Raise if step-to-step reward is very noisy. Lower if memory-bound or to iterate faster.</td>
+</tr>
+<tr>
+<td><strong>max_new_tokens</strong> (max completion length)</td>
+<td>Hard cap on generated tokens per completion. Bounds compute and truncation behavior.</td>
+<td>Task-dependent: 8–64 short tasks; 1k–8k+ reasoning</td>
+<td>Raise if truncation rate is high and answers are genuinely getting cut off. Keep tight for short-answer tasks to save compute.</td>
+</tr>
+<tr>
+<td><strong>max_prompt_length</strong></td>
+<td>Cap on prompt tokens (left-truncation if exceeded).</td>
+<td>Fits your dataset (512–4k typical)</td>
+<td>Raise if prompts are being silently truncated; lower to save memory.</td>
+</tr>
+<tr>
+<td><strong>temperature</strong></td>
+<td>Sampling temperature during rollout. Primary exploration knob — higher = more diverse groups.</td>
+<td>0.7–1.2 (often 1.0)</td>
+<td>Raise when entropy/diversity collapses early or groups go uniform. Lower if rollouts are incoherent/off-task.</td>
+</tr>
+<tr>
+<td><strong>top_p / top_k / min_p</strong></td>
+<td>Nucleus / top-k / min-p truncation of the sampling distribution. Trades diversity for quality.</td>
+<td>top_p 0.9–1.0; top_k off or 50; min_p 0–0.05</td>
+<td>Loosen (higher top_p, lower top_k) if diversity is too low; tighten if rollouts are degenerate. Keep generous so groups retain variation.</td>
+</tr>
+<tr>
+<td><strong>rollout/eval temperature split</strong></td>
+<td>Separate (low) temperature for evaluation vs. (higher) for training rollouts.</td>
+<td>eval ≈ 0–0.3; train ≈ 0.7–1.0</td>
+<td>Always log both; use greedy/low-temp eval so reported accuracy isn't inflated or hidden by sampling noise.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-advantage-computation-grpo-core">2. Advantage computation (GRPO core)<a class="headerlink" href="#2-advantage-computation-grpo-core" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>norm_std</strong> (std normalization on/off)</td>
+<td>If on: <code>A=(r−μ)/(σ+ε)</code> (original GRPO). If off: <code>A=r−μ</code> (<strong>Dr. GRPO</strong>) — avoids amplifying reward noise when a group's σ is tiny.</td>
+<td>Off (Dr. GRPO) recommended; on only if rewards are well-scaled per group</td>
+<td>Turn <strong>off</strong> if training thrashes / sampled accuracy oscillates despite signal. Keep on only when group reward scales vary a lot and you want auto-scaling.</td>
+</tr>
+<tr>
+<td><strong>adv_eps</strong></td>
+<td>Stabilizer ε in the std denominator (only used when <code>norm_std=on</code>).</td>
+<td>1e-8 – 1e-4</td>
+<td>Raise if you see exploding advantages from near-zero σ; irrelevant when std-norm is off.</td>
+</tr>
+<tr>
+<td><strong>advantage whitening</strong> (batch-level)</td>
+<td>Optionally standardize advantages across the whole batch after group centering.</td>
+<td>Off for GRPO (group centering already done)</td>
+<td>Generally leave off in GRPO; double-normalizing can wash out cross-group signal.</td>
+</tr>
+<tr>
+<td><strong>loss aggregation</strong> (token-mean vs. sequence-mean)</td>
+<td>Whether per-token losses are averaged within a sequence then over sequences (length-balanced) or pooled token-level. Affects length bias.</td>
+<td>Token-level (Dr. GRPO) reduces length bias; per-sequence-mean is the original</td>
+<td>Switch to token-level / length-normalized if mean response length drifts upward (length hacking).</td>
+</tr>
+<tr>
+<td><strong>reward scaling / clipping</strong></td>
+<td>Rescale or clip raw rewards before advantage. Keeps gradients well-conditioned.</td>
+<td>Clip to a sane band; scale to O(1)</td>
+<td>Apply if reward magnitudes are wild or one component dominates; otherwise leave raw.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-ppo-surrogate-trust-region">3. PPO surrogate &amp; trust region<a class="headerlink" href="#3-ppo-surrogate-trust-region" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>clip_eps</strong> (ε)</td>
+<td>Trust-region width on the importance ratio <code>1±ε</code>. Limits how far one update moves per token.</td>
+<td>0.1–0.3 (0.2 standard)</td>
+<td>Lower if ratio max / clip fraction spike or KL explodes. Raise slightly if updates are too timid and learning crawls.</td>
+</tr>
+<tr>
+<td><strong>clip_eps_high / clip_eps_low</strong> (decoupled clipping)</td>
+<td>Asymmetric clip bounds. "Clip-higher" (DAPO) raises the upper bound to keep promoting low-probability good tokens and preserve entropy.</td>
+<td>low ≈ 0.2; high ≈ 0.22–0.28</td>
+<td>Decouple and raise the high bound if entropy collapses early and you're losing exploration.</td>
+</tr>
+<tr>
+<td><strong>inner_epochs</strong> (μ, <code>ppo_epochs</code>)</td>
+<td>Gradient passes over each rollout batch. More = better sample efficiency but more off-policy drift.</td>
+<td>1–4 (often 1)</td>
+<td>Reduce to 1 if approx-KL(policy‖old) or clip fraction grows across epochs. Increase only if rollouts are expensive and the policy stays near-on-policy.</td>
+</tr>
+<tr>
+<td><strong>mini-batch size</strong> (inner update)</td>
+<td>Sub-batch size for each gradient step within the rollout batch.</td>
+<td>Divides the rollout batch; hardware-bound</td>
+<td>Smaller for memory; larger for more stable per-step gradients. Keep ≥ a few groups so advantages are representative.</td>
+</tr>
+<tr>
+<td><strong>loss type</strong> (clip vs. token-level variants)</td>
+<td>Some recipes use token-level policy loss (DAPO) instead of per-sequence to fix length/format biases.</td>
+<td>Standard clipped surrogate; token-level for long-CoT</td>
+<td>Switch when long-completion tasks show length or formatting pathologies.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-kl-penalty-reference-policy">4. KL penalty &amp; reference policy<a class="headerlink" href="#4-kl-penalty-reference-policy" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>kl_beta</strong> (β, KL coefficient)</td>
+<td>Strength of the leash to the reference policy. Prevents drift/forgetting; too high freezes learning.</td>
+<td>0.0–0.1 (many reasoning recipes use 0.001–0.04; some set <strong>0</strong>)</td>
+<td>Raise if KL grows unbounded or the model drifts off-distribution / loses general ability. Lower (or zero) if the leash is choking learning and you have other stabilizers.</td>
+</tr>
+<tr>
+<td><strong>kl_estimator</strong> (k1 / k2 / k3)</td>
+<td>Formula for the per-token KL. k3 = <code>exp(r−l)−(r−l)−1</code> is unbiased and always ≥ 0 (low variance).</td>
+<td>k3</td>
+<td>Use k3 by default; switch only for debugging. High negative-KL fraction with k1 signals you should be on k3.</td>
+</tr>
+<tr>
+<td><strong>KL placement</strong> (in-reward vs. in-loss)</td>
+<td>Whether KL is subtracted from the reward (per-token shaping) or added as a separate loss term.</td>
+<td>In-loss is common in modern GRPO; in-reward is the classic RLHF style</td>
+<td>Move KL into the loss if reward-shaping placement complicates advantage interpretation; keep consistent with your advantage definition.</td>
+</tr>
+<tr>
+<td><strong>target_kl</strong> (adaptive β)</td>
+<td>If set, β is auto-tuned to hold KL near a target (early-stop or controller).</td>
+<td>target KL 0.01–0.1 if used</td>
+<td>Enable when a fixed β is hard to balance — the controller raises β when KL overshoots, relaxes it when under.</td>
+</tr>
+<tr>
+<td><strong>ref_sync_every</strong> (reference refresh)</td>
+<td>How often the frozen reference is updated to the current policy. Never = anchor to SFT/init; periodic = moving anchor.</td>
+<td>Never (RLHF on pretrained); every N steps for from-scratch</td>
+<td>Sync periodically if anchoring to a random/weak init fights learning. Keep fixed when the reference is a good SFT checkpoint you don't want to drift from.</td>
+</tr>
+<tr>
+<td><strong>use_reference / KL on-off</strong></td>
+<td>Whether to include a KL term at all. Some GRPO variants drop it entirely and rely on clipping + entropy.</td>
+<td>On for RLHF; sometimes off for verifiable-reward RL</td>
+<td>Drop KL only when the reward is fully verifiable and clipping/entropy already stabilize training — and watch for drift if you do.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-exploration-entropy">5. Exploration (entropy)<a class="headerlink" href="#5-exploration-entropy" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ent_coef</strong> (α, entropy bonus)</td>
+<td>Reward for higher policy entropy — direct pressure against premature determinism.</td>
+<td>0.0–0.01 (LLM RLHF); higher (0.01–0.1) for from-scratch / small models</td>
+<td>Raise if entropy cliffs to ≈0 early and zero-variance groups climb with poor accuracy. Lower if the policy won't converge / stays too random.</td>
+</tr>
+<tr>
+<td><strong>entropy annealing schedule</strong></td>
+<td>Decays α over training (high exploration early → exploitation late).</td>
+<td>Linear/cosine from start value → ~0.003–0</td>
+<td>Use whenever a static bonus either over-explores late or under-explores early. Anneal to near-zero by the last ~20% of steps.</td>
+</tr>
+<tr>
+<td><strong>min/target entropy</strong> (controller)</td>
+<td>Optionally adapt α to hold entropy above a floor.</td>
+<td>Floor set per task</td>
+<td>Enable if manual α tuning is brittle; the controller raises α when entropy dips below the floor.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-optimization-schedule">6. Optimization &amp; schedule<a class="headerlink" href="#6-optimization-schedule" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>learning_rate</strong></td>
+<td>Step size. The single most impactful stability knob.</td>
+<td>LLM fine-tune: 1e-7 – 1e-5 (often 1e-6). From-scratch small: 1e-4 – 3e-3</td>
+<td>Lower if grad norm / KL / clip fraction spike or loss diverges/NaNs. Raise cautiously if learning is glacial and everything else is stable.</td>
+</tr>
+<tr>
+<td><strong>lr schedule</strong></td>
+<td>Constant, warmup→constant, or warmup→cosine/linear decay.</td>
+<td>Warmup then constant or cosine decay</td>
+<td>Add warmup if early steps are unstable; add decay if late training oscillates around the optimum.</td>
+</tr>
+<tr>
+<td><strong>warmup_steps / ratio</strong></td>
+<td>Ramps LR from ~0 to avoid early instability while optimizer state is cold.</td>
+<td>0–10% of total steps</td>
+<td>Increase if the first few hundred steps show grad/KL spikes.</td>
+</tr>
+<tr>
+<td><strong>total steps / epochs</strong></td>
+<td>Training duration. RL plateaus and can degrade if run too long.</td>
+<td>Until eval plateaus</td>
+<td>Stop when held-out eval plateaus or train–eval gap widens; extend only if still improving.</td>
+</tr>
+<tr>
+<td><strong>max_grad_norm</strong></td>
+<td>Global gradient-norm clip threshold. Core instability guard.</td>
+<td>0.5–1.0</td>
+<td>Lower if grad-norm spikes cause loss jumps. Raise modestly if clipping fires almost every step and is throttling progress.</td>
+</tr>
+<tr>
+<td><strong>gradient_accumulation_steps</strong></td>
+<td>Accumulate grads over micro-batches to reach a large effective batch under memory limits.</td>
+<td>As needed (1–many)</td>
+<td>Increase to grow effective batch without more memory; decrease for fresher, more frequent updates.</td>
+</tr>
+<tr>
+<td><strong>optimizer (AdamW) betas</strong></td>
+<td>Momentum (β1) and variance (β2) decay. β2 lower than default stabilizes noisy RL gradients.</td>
+<td>β1 0.9; β2 0.95–0.999</td>
+<td>Lower β2 (e.g. 0.95) if gradients are noisy/heavy-tailed and Adam is overshooting.</td>
+</tr>
+<tr>
+<td><strong>Adam eps</strong></td>
+<td>Numerical floor in the Adam denominator.</td>
+<td>1e-8 (1e-5 for low-precision)</td>
+<td>Raise if you see instability in low-precision (bf16) training.</td>
+</tr>
+<tr>
+<td><strong>weight_decay</strong></td>
+<td>L2-style regularization on weights.</td>
+<td>0.0–0.1</td>
+<td>Add mild decay if overfitting the reward; keep 0 if it harms learning.</td>
+</tr>
+<tr>
+<td><strong>precision / dtype</strong></td>
+<td>fp32 / bf16 / fp16 compute. Affects stability and throughput.</td>
+<td>bf16 for LLMs (fp32 master where needed)</td>
+<td>Move log-prob/KL math to higher precision if you see NaNs or unstable ratios in fp16.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-reward-configuration">7. Reward configuration<a class="headerlink" href="#7-reward-configuration" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>reward shaping weights</strong></td>
+<td>Relative weight of each reward component (e.g. correctness vs. format vs. length).</td>
+<td>Correctness dominant; auxiliaries small</td>
+<td>Rebalance if an easy auxiliary term creates a local optimum (model farms the easy bonus, ignores the hard goal).</td>
+</tr>
+<tr>
+<td><strong>dense vs. sparse reward</strong></td>
+<td>Graded partial credit vs. all-or-nothing. Dense rewards give gradient before the policy can solve the task.</td>
+<td>Dense/shaped early; can sparsen later</td>
+<td>Densify when correctness never improves while format saturates (the sparse-reward trap).</td>
+</tr>
+<tr>
+<td><strong>length penalty / normalization</strong></td>
+<td>Penalize or normalize by completion length to kill length-bias hacking.</td>
+<td>Mild penalty or token-level normalization</td>
+<td>Add when mean response length / truncation rate drifts upward.</td>
+</tr>
+<tr>
+<td><strong>reward clipping / normalization</strong></td>
+<td>Bound or standardize reward values for stable advantages.</td>
+<td>Clip to a band; normalize to O(1)</td>
+<td>Apply when reward magnitudes are heavy-tailed and destabilize gradients.</td>
+</tr>
+<tr>
+<td><strong>reward-model refresh / ensembling</strong> (RLHF)</td>
+<td>Update or ensemble a learned reward model to resist over-optimization.</td>
+<td>Periodic refresh / small ensemble</td>
+<td>Use when the train–eval gap widens (the policy is exploiting RM quirks).</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-variant-specific-knobs-dapo-dr-grpo-dynamic-sampling">8. Variant-specific knobs (DAPO / Dr. GRPO / dynamic sampling)<a class="headerlink" href="#8-variant-specific-knobs-dapo-dr-grpo-dynamic-sampling" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Effect</th>
+<th>Normal range</th>
+<th>When to adjust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>dynamic sampling</strong></td>
+<td>Discard prompts whose group is all-correct or all-wrong (zero advantage) and resample, so every batch carries gradient.</td>
+<td>On for efficiency</td>
+<td>Enable when a large fraction of groups are zero-variance and wasting compute.</td>
+</tr>
+<tr>
+<td><strong>overlong filtering / soft punishment</strong></td>
+<td>Mask or softly penalize completions that hit the length cap, instead of rewarding them.</td>
+<td>On for long-CoT tasks</td>
+<td>Enable when truncated completions corrupt the reward signal.</td>
+</tr>
+<tr>
+<td><strong>token-level policy loss</strong></td>
+<td>Average the loss over tokens rather than sequences so long completions aren't down-weighted.</td>
+<td>On for long, variable-length outputs</td>
+<td>Switch when long-answer tasks show length/format bias under per-sequence averaging.</td>
+</tr>
+<tr>
+<td><strong>clip-higher</strong> (decoupled upper clip)</td>
+<td>See §3 — DAPO's asymmetric clip to preserve exploration.</td>
+<td>high bound ≈ 0.22–0.28</td>
+<td>Enable alongside entropy measures when collapse is the failure mode.</td>
+</tr>
+<tr>
+<td><strong>no-KL / verifiable-reward mode</strong></td>
+<td>Drop the reference KL entirely for fully verifiable rewards (math/code), leaning on clipping + dynamic sampling.</td>
+<td>Off unless reward is verifiable</td>
+<td>Use only with trustworthy programmatic rewards; monitor drift in general ability.</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="quick-starting-point-verifiable-reward-grpo-on-a-pretrained-llm">Quick starting point (verifiable-reward GRPO on a pretrained LLM)<a class="headerlink" href="#quick-starting-point-verifiable-reward-grpo-on-a-pretrained-llm" title="Permanent link">¶</a></h2>
+<p>A reasonable default set to tune <em>from</em>, not a universal recipe:</p>
+<ul>
+<li><code>group_size</code> 8–16, <code>temperature</code> 1.0, <code>top_p</code> 1.0</li>
+<li><code>norm_std</code> off (Dr. GRPO), token-level loss</li>
+<li><code>clip_eps</code> 0.2 (consider <code>clip_high</code> 0.28 if entropy collapses)</li>
+<li><code>inner_epochs</code> 1</li>
+<li><code>kl_beta</code> 0.0–0.04 with k3 estimator; reference fixed at the SFT checkpoint</li>
+<li><code>ent_coef</code> 0–0.01 (anneal if used)</li>
+<li><code>lr</code> ~1e-6 with short warmup, <code>max_grad_norm</code> 1.0, bf16</li>
+<li>dynamic sampling on; dense reward early, length-normalized</li>
+</ul>
+<p>Change one thing at a time, and let the metrics sheet tell you which knob the current
+failure mode points to.</p>
+  <div class="footer">
+    Rendered from Markdown · GRPO training reference.
+  </div>
+</div>
+<script>
+  // wrap every table in a horizontal-scroll container and tag column count
+  document.querySelectorAll('table').forEach(function (t) {
+    var cols = t.querySelectorAll('thead th').length;
+    if (cols === 5) t.classList.add('t5');
+    if (cols === 4) t.classList.add('t4');
+    if (!t.parentElement.classList.contains('tablewrap')) {
+      var w = document.createElement('div'); w.className = 'tablewrap';
+      t.parentNode.insertBefore(w, t); w.appendChild(t);
+    }
+  });
+</script>
+</body>
+</html>
