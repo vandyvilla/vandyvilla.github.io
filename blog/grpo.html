@@ -78,6 +78,11 @@
   }
   em { color: var(--fg); }
 
+  /* ---- back link ---- */
+  .backlink { display: inline-block; margin: 0 0 1.8em; color: var(--muted);
+    font-size: .92rem; font-weight: 500; }
+  .backlink:hover { color: var(--accent); text-decoration: none; }
+
   /* ---- title block ---- */
   .doc-title { font-size: 2.3rem; border: none; margin: 0 0 .1em; padding: 0; }
   .doc-desc { color: var(--muted); font-size: 1.05rem; margin: 0 0 1.4em; }
@@ -130,6 +135,7 @@
 </head>
 <body>
 <div class="wrap">
+  <a href="../index.html#blog" class="backlink">&larr; Back to all posts</a>
   <h1 class="doc-title">A Practical GRPO Reference: Metrics to Watch and Configs to Tune</h1>
   <p class="doc-desc">A field reference for training language models with GRPO — every metric worth logging (with healthy/abnormal shapes and fixes) and every configuration knob (with ranges and when to turn it).</p>
   <p><em>Group Relative Policy Optimization (GRPO) replaces PPO's learned value critic with a
