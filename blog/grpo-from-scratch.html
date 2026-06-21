@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRPO from Scratch: A Code Walkthrough</title>
+<meta name="description" content="A step-by-step, fully-coded walkthrough of Group Relative Policy Optimization (GRPO): rollout, group-relative advantage, the clipped surrogate, KL and entropy — trained from scratch on a toy addition task.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
+    --code-fg: #b3266b; --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
+    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --term-bg: #0d1117; --term-fg: #d1d9e0; --maxw: 880px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+      --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
+      --code-fg: #ff7bbf; --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
+      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff;
+      --term-bg: #010409; --term-fg: #c9d1d9;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+          Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  h1, h2, h3 { line-height: 1.25; font-weight: 650; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 1.5rem; margin: 2.4em 0 0.2em; padding-bottom: .28em;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  h2 .num {
+    display: inline-block; min-width: 1.7em; margin-right: .5em; padding: 0 .45em;
+    font-size: .8em; font-weight: 700; text-align: center; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 7px;
+    vertical-align: middle;
+  }
+  h3 { font-size: 1.15rem; margin: 1.8em 0 0.3em; }
+  p { margin: 0.8em 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { font-weight: 650; }
+  code {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: .12em .38em; border-radius: 5px; font-size: .86em;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border-soft);
+    border-radius: 10px; padding: 0; overflow-x: auto; margin: 1.1em 0 1.4em;
+  }
+  pre code.hljs {
+    background: transparent; color: inherit; padding: 16px 18px;
+    font-size: .855rem; line-height: 1.6;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  hr { border: none; border-top: 1px solid var(--border-soft); margin: 2.4em 0; }
+
+  /* back link + title block */
+  .backlink { display: inline-block; margin: 0 0 1.6em; color: var(--muted);
+    font-size: .92rem; font-weight: 500; }
+  .backlink:hover { color: var(--accent); text-decoration: none; }
+  .doc-title { font-size: 2.4rem; line-height: 1.15; margin: 0 0 .15em; font-weight: 700;
+    letter-spacing: -0.02em; }
+  .doc-sub { color: var(--muted); font-size: 1.18rem; margin: 0 0 1.1em; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.8em;
+    display: flex; gap: .6em; flex-wrap: wrap; align-items: center; }
+  .meta .dot { opacity: .5; }
+  .tag { font-size: .76rem; font-weight: 600; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd);
+    border-radius: 999px; padding: .12em .7em; }
+  .lead { font-size: 1.06rem; }
+
+  /* table of contents */
+  .toc { background: var(--row-alt); border: 1px solid var(--border-soft);
+    border-radius: 12px; padding: 16px 22px 18px; margin: 2em 0; }
+  .toctitle { font-weight: 700; font-size: .82rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 .6em; }
+  .toc ol { margin: 0; padding-left: 1.4em; columns: 2; column-gap: 2.4em; }
+  .toc li { margin: .32em 0; padding-left: .2em; }
+  @media (max-width: 620px) { .toc ol { columns: 1; } }
+
+  /* algorithm-at-a-glance ordered steps */
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 1.2em 0; }
+  .steps li { position: relative; padding: .55em 0 .55em 3em; margin: 0;
+    border-bottom: 1px solid var(--border-soft); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: .55em; width: 2em; height: 2em;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .85em; font-weight: 700; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 50%;
+  }
+
+  /* callout note */
+  .note { background: var(--note-bg); border: 1px solid var(--note-bd);
+    border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .96rem; }
+  .note strong { font-weight: 700; }
+
+  /* terminal / output block */
+  .term { background: var(--term-bg); color: var(--term-fg);
+    border-radius: 10px; padding: 14px 18px; overflow-x: auto; margin: 1.1em 0 1.4em;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .82rem; line-height: 1.55; border: 1px solid var(--border); }
+  .term .cap { color: #8b949e; display: block; margin-bottom: .5em;
+    font-size: .92em; }
+  .term pre { margin: 0; padding: 0; background: none; border: none; color: inherit; }
+
+  /* figure */
+  figure { margin: 1.4em 0; }
+  figure img { width: 100%; height: auto; border: 1px solid var(--border-soft);
+    border-radius: 10px; background: #fff; }
+  figcaption { color: var(--muted); font-size: .9rem; margin-top: .7em;
+    text-align: center; }
+
+  .footer { margin-top: 3.4em; padding-top: 1.4em; border-top: 1px solid var(--border-soft);
+    color: var(--muted); font-size: .9rem; }
+  @media (max-width: 640px) {
+    .wrap { padding: 28px 16px 64px; }
+    .doc-title { font-size: 1.85rem; } .doc-sub { font-size: 1.05rem; }
+    h2 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="../index.html#blog" class="backlink">&larr; Back to all posts</a>
+
+  <h1 class="doc-title">GRPO from Scratch: A Code Walkthrough</h1>
+  <p class="doc-sub">Building Group Relative Policy Optimization end to end &mdash; and watching a tiny transformer learn single-digit addition by reinforcement learning.</p>
+  <div class="meta">
+    <span class="tag">GRPO</span><span class="tag">RLHF</span><span class="tag">PyTorch</span>
+    <span class="dot">&middot;</span><span>June 2026</span>
+    <span class="dot">&middot;</span><span>~12 min read</span>
+  </div>
+
+  <p class="lead"><strong>GRPO</strong> (Group Relative Policy Optimization) is the reinforcement-learning
+  algorithm behind DeepSeek-R1 and much of the current wave of reasoning models. It strips the
+  learned value critic out of PPO and replaces it with one disarmingly simple idea: sample a
+  <em>group</em> of completions for each prompt, and judge every completion against its group's
+  average reward. Better-than-average samples get reinforced; worse-than-average ones get
+  suppressed. No value network, no GAE &mdash; just relative comparison within a group.</p>
+
+  <p>This post implements the whole thing from scratch &mdash; model, sampling, reward, advantages,
+  the clipped surrogate, KL, and entropy &mdash; in a few hundred lines of PyTorch, and trains it on
+  a deliberately tiny task: teach a small transformer to compute <code>a+b</code> for single digits.
+  The task is trivial enough to train in minutes on a single GPU, yet it exercises every moving part
+  of a real GRPO run, and every failure mode shows up in the metrics. If you want the companion
+  debugging reference, see
+  <a href="grpo.html">A Practical GRPO Reference: Metrics to Watch and Configs to Tune</a>.</p>
+
+  <h3>The GRPO loop at a glance</h3>
+  <ol class="steps">
+    <li><strong>Rollout.</strong> Sample <em>G</em> completions for each of <em>B</em> prompts from the current policy.</li>
+    <li><strong>Reward.</strong> Score every completion with a programmatic reward function.</li>
+    <li><strong>Advantage.</strong> Center each completion's reward against its group's mean &mdash; the &ldquo;group-relative&rdquo; step.</li>
+    <li><strong>Surrogate.</strong> Update the policy with PPO's clipped objective, weighting each completion by its advantage.</li>
+    <li><strong>Regularize.</strong> Add a KL penalty toward a frozen reference and an entropy bonus to keep exploring.</li>
+    <li><strong>Repeat</strong> for a few thousand steps.</li>
+  </ol>
+
+  <div class="toc">
+    <div class="toctitle">Contents</div>
+    <ol>
+      <li><a href="#config">Hyperparameters: the control panel</a></li>
+      <li><a href="#model">Tokenizer &amp; the TinyGPT policy</a></li>
+      <li><a href="#init">Policy &amp; reference models</a></li>
+      <li><a href="#reward">Reward &amp; data generation</a></li>
+      <li><a href="#optim">Optimizer &amp; metric logging</a></li>
+      <li><a href="#rollout">Rollout: sampling completions</a></li>
+      <li><a href="#logprobs">Scoring tokens: log-probs &amp; entropy</a></li>
+      <li><a href="#trainstep">The GRPO training step</a></li>
+      <li><a href="#loop">The training loop</a></li>
+      <li><a href="#results">Results: reading the metrics</a></li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2 id="config"><span class="num">1</span>Hyperparameters: the control panel</h2>
+  <p>Everything tunable in one place. GRPO inherits PPO's sampling and trust-region knobs and adds a
+  few of its own: the <strong>group size</strong> <code>G</code>, whether to normalize advantages by
+  their group standard deviation, and how often to re-sync the reference policy. The values below are
+  tuned for <em>from-scratch</em> training, which is why the learning rate (<code>1e-3</code>) and
+  entropy bonus (<code>0.08</code>) are far larger than you'd use when fine-tuning a pretrained LLM.
+  Each completion is at most three tokens &mdash; two digits plus an end-of-sequence marker.</p>
+  <pre><code class="language-python"># --- Rollout / sampling ---
+prompts_per_step: int = 24  # prompts sampled per step (the batch dimension, B)
+group_size: int = 16  # G: completions sampled per prompt
+max_new_tokens: int = 3  # max completion length (&lt;=2 digits + EOS)
+temperature: float = 1.0  # rollout sampling temperature (primary exploration knob)
+# Optional: max_prompt_length, top-k, top-p, repetition penalty.
+
+# --- Optimizer &amp; schedule ---
+steps: int = 3000  # total training steps
+lr: float = 1e-3  # learning rate (large, since we train from scratch)
+max_grad_norm: float = 1.0  # gradient-norm clip threshold
+
+# --- GRPO advantage ---
+norm_std: bool = False  # divide advantage by group std? (off when std is small)
+adv_eps: float = 1e-4  # epsilon in the std denominator (only used if norm_std)
+
+# --- Surrogate &amp; trust region ---
+clip_eps: float = 0.2  # PPO clip width: ratio clipped to 1 +/- clip_eps
+inner_epochs: int = 2  # &quot;mu&quot;: gradient epochs per rollout batch
+# Optional: mini_batch_size
+
+# --- KL &amp; reference policy ---
+kl_beta: float = 0.02  # weight of KL(pi || pi_ref) in the loss
+ref_sync_every: int = 150  # refresh the reference policy every N steps
+
+# --- Entropy (exploration) ---
+ent_coef: float = 0.08  # entropy bonus coefficient, annealed -&gt; ~0</code></pre>
+
+  <h2 id="model"><span class="num">2</span>Tokenizer &amp; the TinyGPT policy</h2>
+  <p>A reinforcement-learning loop needs a policy to optimize. Here it is <code>TinyGPT</code>: a
+  two-layer, causally-masked Transformer over a 15-token vocabulary (the ten digits, <code>+</code>,
+  <code>=</code>, and three special tokens). It is a decoder-only language model implemented with a
+  <code>TransformerEncoder</code> plus a triangular attention mask. The vocabulary together with
+  <code>encode_prompt</code> / <code>decode_completion</code> plays the role a tokenizer would in a
+  real pipeline &mdash; turning <code>"3+4="</code> into token ids, and decoded completions back into
+  strings.</p>
+  <pre><code class="language-python">import math
+import random
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.distributions as dist
+
+device = &quot;cuda&quot; if torch.cuda.is_available() else &quot;cpu&quot;
+print(&quot;device:&quot;, device)
+
+# Vocabulary: digits 0-9, &#x27;+&#x27;, &#x27;=&#x27;, and the special tokens BOS, EOS, PAD.
+TOKENS = [str(d) for d in range(10)] + [&quot;+&quot;, &quot;=&quot;, &quot;&lt;bos&gt;&quot;, &quot;&lt;eos&gt;&quot;, &quot;&lt;pad&gt;&quot;]
+STOI = {t: i for i, t in enumerate(TOKENS)}
+PLUS, EQ, BOS, EOS, PAD = (STOI[t] for t in [&quot;+&quot;, &quot;=&quot;, &quot;&lt;bos&gt;&quot;, &quot;&lt;eos&gt;&quot;, &quot;&lt;pad&gt;&quot;])
+VOCAB = len(TOKENS)
+
+
+def encode_prompt(a, b):
+    # Token ids for the prompt &quot;a+b=&quot; (with a leading BOS).
+    return [BOS] + [STOI[c] for c in f&quot;{a}+{b}=&quot;]
+
+
+def decode_completion(toks):
+    # Turn generated token ids back into a string, stopping at the first EOS.
+    out = []
+    for t in toks:
+        if t == EOS:
+            break
+        out.append(TOKENS[t] if t &lt; 10 else &quot;?&quot;)
+    return &quot;&quot;.join(out)
+
+
+class TinyGPT(nn.Module):
+    def __init__(self, vocab=VOCAB, d=128, n_head=4, n_layer=2, max_len=16):
+        super().__init__()
+        self.tok = nn.Embedding(vocab, d)
+        self.pos = nn.Embedding(max_len, d)
+        layer = nn.TransformerEncoderLayer(
+            d_model=d,
+            nhead=n_head,
+            dim_feedforward=4 * d,
+            batch_first=True,
+            dropout=0.0,
+            norm_first=True,
+            activation=&quot;gelu&quot;,
+        )
+        self.blocks = nn.TransformerEncoder(
+            layer, num_layers=n_layer, enable_nested_tensor=False
+        )
+        self.ln = nn.LayerNorm(d)
+        self.head = nn.Linear(d, vocab, bias=False)
+
+    def forward(self, idx):  # idx: (B, T) -&gt; logits: (B, T, V)
+        B, T = idx.shape
+        x = self.tok(idx) + self.pos(torch.arange(T, device=idx.device))[None]
+        # Causal mask: each position attends only to itself and the past.
+        mask = torch.triu(torch.full((T, T), float(&quot;-inf&quot;), device=idx.device), 1)
+        x = self.blocks(x, mask=mask)
+        return self.head(self.ln(x))</code></pre>
+
+  <h2 id="init"><span class="num">3</span>Policy &amp; reference models</h2>
+  <p>GRPO keeps two copies of the network: the <strong>policy</strong> we train, and a frozen
+  <strong>reference</strong> that anchors the KL penalty so the policy cannot drift arbitrarily far
+  from sensible behavior. Both start from the same random initialization &mdash; the from-scratch
+  setting &mdash; and rather than pinning the reference to a fixed SFT checkpoint, we periodically
+  re-sync it to the policy (see <code>ref_sync_every</code> in the training step). Seeding everything
+  keeps the run reproducible.</p>
+  <pre><code class="language-python">seed = 0
+torch.manual_seed(seed)
+random.seed(seed)
+np.random.seed(seed)
+
+# Policy network (trained) plus a frozen reference copy used as the KL anchor.
+model = TinyGPT().to(device)
+ref_model = TinyGPT().to(device)
+ref_model.load_state_dict(model.state_dict())
+for p in ref_model.parameters():
+    p.requires_grad_(False)</code></pre>
+
+  <h2 id="reward"><span class="num">4</span>Reward &amp; data generation</h2>
+  <p>RL replaces labels with a reward, and <code>compute_reward</code> is the entire supervision
+  signal. It gives a small penalty for malformed output, full credit for the exact answer, and
+  graded partial credit that decays with distance from the truth. That <strong>dense shaping</strong>
+  is what gives the policy a gradient to climb <em>before</em> it can reliably solve the task &mdash; a
+  pure all-or-nothing reward would leave it stuck at zero for a long time. <code>generate_dataset</code>
+  synthesizes a fresh batch of random <code>a+b</code> problems every step, so the model never sees a
+  fixed dataset; it has to learn the <em>operation</em>, not memorize a lookup table.</p>
+  <pre><code class="language-python">def compute_reward(completion_tokens, answer):
+    &quot;&quot;&quot;Returns (reward, well_formed, exactly_correct).&quot;&quot;&quot;
+    text = decode_completion(completion_tokens)
+    # Well-formed = a 1-2 digit number that actually terminated with EOS.
+    well_formed = text.isdigit() and 1 &lt;= len(text) &lt;= 2 and EOS in completion_tokens
+    if not well_formed:
+        return -0.1, 0.0, 0.0
+    val = int(text)
+    if abs(val - answer) &lt; 0.001:
+        return 1.0, 1.0, 1.0  # exactly correct
+    # Partial credit: answers closer to the target score higher (dense shaping).
+    return 0.1 + 0.5 * math.exp(-abs(val - answer) / 3.0), 1.0, 0.0
+
+
+def generate_dataset(prompts_per_step, group_size):
+    # Sample random single-digit addition problems.
+    pairs = [
+        (random.randint(0, 9), random.randint(0, 9)) for _ in range(prompts_per_step)
+    ]
+    dataset = [
+        {&quot;prompt&quot;: f&quot;{a}+{b}&quot;, &quot;encoded&quot;: encode_prompt(a, b), &quot;answer&quot;: float(a + b)}
+        for a, b in pairs
+    ]
+
+    # A real pipeline&#x27;s tokenizer would handle padding/truncation and return
+    # input_ids + attention_mask; here every &quot;a+b=&quot; prompt has the same length.
+    input_ids = torch.tensor(
+        [example[&quot;encoded&quot;] for example in dataset], dtype=torch.long, device=device
+    )
+    golden_answers = torch.tensor(
+        [example[&quot;answer&quot;] for example in dataset], dtype=torch.float32, device=device
+    )
+    return input_ids, golden_answers</code></pre>
+  <div class="note"><strong>Why return three values?</strong> The <code>well_formed</code> and
+  <code>exactly_correct</code> flags don't affect the gradient &mdash; they exist purely so we can log
+  format-rate and true accuracy separately from the shaped reward the policy actually optimizes.
+  Tracking an independent correctness metric is how you catch reward hacking.</div>
+
+  <h2 id="optim"><span class="num">5</span>Optimizer &amp; metric logging</h2>
+  <p>AdamW, plus a dictionary of metric lists. The logging is not an afterthought: in RL the loss
+  value is nearly meaningless (it is an objective to ascend, not a quantity that monotonically
+  decreases), so you debug almost entirely from these curves &mdash; reward, accuracy, KL, entropy,
+  advantage spread, clip fraction, and response length.</p>
+  <pre><code class="language-python">optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+
+# Per-step metric history. Watching these curves is how you debug GRPO.
+history = {
+    k: []
+    for k in [
+        &quot;reward&quot;,
+        &quot;accuracy&quot;,
+        &quot;format&quot;,
+        &quot;kl&quot;,
+        &quot;entropy&quot;,
+        &quot;clip_frac&quot;,
+        &quot;loss&quot;,
+        &quot;grad_norm&quot;,
+        &quot;adv_std&quot;,
+        &quot;frac_zero_adv_groups&quot;,
+        &quot;resp_len&quot;,
+    ]
+}</code></pre>
+
+  <h2 id="rollout"><span class="num">6</span>Rollout: sampling completions</h2>
+  <p>This is step 1 of the loop. <code>generate</code> samples completions autoregressively from the
+  current policy under <code>@torch.no_grad()</code>. Two details matter specifically for RL.
+  First, sampling is <strong>stochastic</strong> (temperature&nbsp;&gt;&nbsp;0): exploration is the
+  whole game, since the policy can only learn from the variety of completions it produces. Second,
+  once a sequence emits <code>EOS</code> it is padded with <code>PAD</code>, so post-EOS tokens can be
+  masked out of the loss later instead of polluting it.</p>
+  <pre><code class="language-python">@torch.no_grad()
+def generate(model, input_ids, max_new_tokens, temperature):
+    &quot;&quot;&quot;Autoregressively sample completions for a batch of prompts.&quot;&quot;&quot;
+    model.eval()
+    sequence = input_ids.clone()
+
+    # Track which sequences have emitted EOS so we stop extending them.
+    done = torch.zeros(input_ids.size(0), 1, dtype=torch.bool, device=device)
+    for _ in range(max_new_tokens):
+        outputs = model(sequence)  # (B*G, S, V)
+        next_token_logits = outputs[:, -1, :]  # next-token logits: (B*G, V)
+
+        # Optional: repetition penalty, top-k / top-p truncation could go here.
+
+        if temperature == 0.0:
+            # Greedy decoding.
+            next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
+        else:
+            next_token_logits = next_token_logits / temperature
+            probs = F.softmax(next_token_logits, dim=-1)
+            if not torch.isfinite(probs).all():
+                raise RuntimeError(&quot;non-finite sampling probs — training diverged&quot;)
+            next_token = torch.multinomial(probs, num_samples=1)
+
+        # Once a sequence is done, keep appending PAD so post-EOS tokens get
+        # masked out of the loss instead of polluting it.
+        next_token = torch.where(done, torch.full_like(next_token, PAD), next_token)
+        done = done | (next_token == EOS)
+
+        # Optional early stop once every sequence has finished:
+        # if done.all():
+        #     break
+
+        sequence = torch.cat([sequence, next_token], dim=1)
+
+    model.train()
+    return sequence</code></pre>
+
+  <h2 id="logprobs"><span class="num">7</span>Scoring tokens: log-probs &amp; entropy</h2>
+  <p>This function is the bridge between sampled tokens and a differentiable objective. For every
+  generated token it returns three things the surrogate needs: the <strong>log-probability</strong>
+  the model assigns to the token actually produced, the per-position <strong>entropy</strong> (the
+  exploration signal), and a <strong>completion mask</strong> that zeroes out prompt and padding
+  positions. Computing entropy through <code>torch.distributions.Categorical</code> rather than the
+  naive <code>-(p*log&nbsp;p).sum()</code> avoids NaNs and keeps it aligned to the same
+  <code>S-1</code> length as the log-probs.</p>
+  <pre><code class="language-python">def per_token_logprobs(model, generated_sequences, temperature, prompt_length):
+    &quot;&quot;&quot;Per-token log-probs, entropy, and a completion mask for each sequence.&quot;&quot;&quot;
+    logits = model(generated_sequences)  # (B*G, S, V)
+
+    # Predict token t+1 from position t: drop the last step, scale by temperature.
+    shifted = logits[:, :-1, :].float() / temperature  # (B*G, S-1, V)
+    targets = generated_sequences[:, 1:]  # (B*G, S-1)
+    logprobs_all = F.log_softmax(shifted, dim=-1)
+
+    # Entropy of the policy (exploration signal). torch.distributions is used
+    # for a numerically stable value aligned to the S-1 length.
+    policy_dist = dist.Categorical(logits=logits[:, :-1, :])
+    entropy = policy_dist.entropy()  # (B*G, S-1)
+
+    # Log-prob of the token actually generated at each position.
+    logprobs = logprobs_all.gather(-1, targets.unsqueeze(-1)).squeeze(-1)  # (B*G, S-1)
+
+    # Mask in only completion tokens (after the prompt) that are not PAD.
+    # Since PAD follows the first EOS, this stops right after EOS.
+    S = generated_sequences.size(1) - 1
+    pos = torch.arange(S, device=device).unsqueeze(0)  # (1, S-1)
+    completion_mask = (pos &gt;= prompt_length - 1) &amp; (targets != PAD)
+    return logprobs, entropy, completion_mask</code></pre>
+
+  <h2 id="trainstep"><span class="num">8</span>The GRPO training step</h2>
+  <p>The heart of the algorithm: one full optimization step, annotated to match the seven stages
+  below. It rolls out a batch, scores it, converts rewards into
+  <strong>group-relative advantages</strong>, freezes the &ldquo;old&rdquo; and reference log-probs,
+  then runs a few inner PPO epochs of the clipped surrogate plus the KL penalty and entropy bonus.
+  A few things are worth pausing on:</p>
+  <ul>
+    <li><strong>Group-relative advantage</strong> (stage 4) is the single idea that makes this GRPO
+    rather than PPO: there is no value network, just <code>reward&nbsp;&minus;&nbsp;group_mean</code>
+    (optionally divided by the group's std).</li>
+    <li><strong>The clipped surrogate</strong> (stage 7) is standard PPO; the same scalar advantage is
+    broadcast across every token in a completion.</li>
+    <li><strong>KL uses the k3 estimator</strong> <code>exp(&Delta;)&nbsp;&minus;&nbsp;&Delta;&nbsp;&minus;&nbsp;1</code>,
+    which is unbiased and always non-negative &mdash; far better behaved than a raw
+    log-ratio difference.</li>
+    <li><strong>Both the entropy bonus and the learning rate are annealed</strong>: lots of
+    exploration and large steps early, exploitation and small steps late.</li>
+  </ul>
+  <pre><code class="language-python">def train_step(step):
+    # 1) Fresh rollout batch: sample prompts and replicate each G times.
+    input_ids, golden_answers = generate_dataset(prompts_per_step, group_size)
+    prompt_length = input_ids.shape[1]  # P
+
+    repeated_inputs = input_ids.repeat_interleave(group_size, dim=0)  # (B*G, P)
+    repeated_answers = golden_answers.repeat_interleave(group_size, dim=0)  # (B*G,)
+
+    # 2) Generate G completions per prompt with the current policy.
+    model.eval()
+    generated_sequences = generate(
+        model, repeated_inputs, max_new_tokens, temperature
+    )  # (B*G, S)
+
+    # 3) Score every completion with the programmatic reward.
+    completions_only = generated_sequences[:, prompt_length:]  # (B*G, S-P)
+    completion_token_lists = [seq.tolist() for seq in completions_only]
+
+    correct, fmt_ok, rewards_list = [], [], []
+    for tokens, answer in zip(completion_token_lists, repeated_answers):
+        rew, well_formed, exact = compute_reward(tokens, answer)
+        rewards_list.append(rew)
+        correct.append(exact)
+        fmt_ok.append(well_formed)
+    rewards = torch.tensor(rewards_list, dtype=torch.float32, device=device)  # (B*G,)
+
+    # 4) Group-relative advantage: center each completion against its group.
+    grouped = rewards.view(-1, group_size)  # (B, G)
+    mean = grouped.mean(dim=1, keepdim=True)  # (B, 1)
+    std = grouped.std(dim=1, keepdim=True)  # (B, 1)
+    if norm_std:
+        advantages = ((grouped - mean) / (std + adv_eps)).view(-1)  # (B*G,)
+    else:
+        advantages = (grouped - mean).view(-1)  # (B*G,)
+    zero_groups = (std.squeeze(1) &lt; 1e-8).float().mean().item()
+
+    # 5) Freeze the &quot;old&quot; and reference log-probs for this rollout batch.
+    with torch.no_grad():
+        old_logprobs, _, _ = per_token_logprobs(
+            model, generated_sequences, temperature, prompt_length
+        )
+        ref_logprobs, _, _ = per_token_logprobs(
+            ref_model, generated_sequences, temperature, prompt_length
+        )
+
+    # 6) Anneal entropy bonus (alpha) and cosine-decay the learning rate.
+    frac = step / steps
+    alpha = ent_coef * max(0.0, 1.0 - frac / 0.8) + 0.003
+    for pg in optimizer.param_groups:
+        pg[&quot;lr&quot;] = lr * (0.15 + 0.85 * 0.5 * (1 + math.cos(math.pi * frac)))
+
+    # 7) Inner PPO epochs: reuse the rollout batch for a few gradient steps.
+    model.train()
+    for _ in range(inner_epochs):
+        cur_logprobs, entropy, completion_mask = per_token_logprobs(
+            model, generated_sequences, temperature, prompt_length
+        )  # (B*G, S-1)
+
+        # Importance-sampling ratio between the current and old policy.
+        ratio = torch.exp(cur_logprobs - old_logprobs)  # (B*G, S-1)
+
+        # Clipped surrogate objective (same advantage broadcast over tokens).
+        surrogate1 = ratio * advantages.unsqueeze(1)
+        surrogate2 = torch.clamp(
+            ratio, 1 - clip_eps, 1 + clip_eps
+        ) * advantages.unsqueeze(1)
+        policy_loss = -torch.min(surrogate1, surrogate2)
+
+        # KL(policy || reference) via the unbiased, non-negative k3 estimator.
+        kl = torch.exp(ref_logprobs - cur_logprobs) - (ref_logprobs - cur_logprobs) - 1
+
+        # Full GRPO objective: surrogate + KL penalty - entropy bonus.
+        per_token_loss = policy_loss + kl_beta * kl - alpha * entropy
+        tokens_per_sequence = completion_mask.sum(1).clamp(1)  # (B*G,)
+        loss = ((per_token_loss * completion_mask).sum(1) / tokens_per_sequence).mean()
+
+        # Policy update with gradient-norm clipping.
+        optimizer.zero_grad()
+        loss.backward()
+        gnorm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+        optimizer.step()
+
+    # --- Logging: the signals you watch to debug GRPO ---
+    n = completion_mask.sum()  # total completion tokens
+
+    # Reward &amp; task performance.
+    history[&quot;reward&quot;].append(rewards.mean().item())
+    history[&quot;accuracy&quot;].append(float(np.mean(correct)))  # exact-match (pass@1)
+    history[&quot;format&quot;].append(float(np.mean(fmt_ok)))
+
+    # Divergence &amp; exploration (both should decay gradually).
+    history[&quot;kl&quot;].append(((kl * completion_mask).sum() / n).item())
+    history[&quot;entropy&quot;].append(((entropy * completion_mask).sum() / n).item())
+
+    # Advantage health.
+    history[&quot;frac_zero_adv_groups&quot;].append(zero_groups)  # -&gt;1 means no signal
+    history[&quot;adv_std&quot;].append(advantages.std().item())
+
+    # Surrogate mechanics: fraction of tokens whose ratio was clipped.
+    clip_frac = (
+        ((ratio &gt; 1 + clip_eps) | (ratio &lt; 1 - clip_eps)).float() * completion_mask
+    ).sum() / n
+    history[&quot;clip_frac&quot;].append(clip_frac.item())
+
+    # Optimization.
+    history[&quot;loss&quot;].append(loss.item())  # noisy; not the headline metric
+    history[&quot;grad_norm&quot;].append(float(gnorm))  # raw magnitude before clipping
+
+    # Output quality: rising length can signal length-bias reward hacking.
+    history[&quot;resp_len&quot;].append(tokens_per_sequence.float().mean().item())
+
+    # Optional: periodically refresh the reference policy (the KL anchor).
+    if ref_sync_every and (step + 1) % ref_sync_every == 0:
+        ref_model.load_state_dict(model.state_dict())
+    return model, history</code></pre>
+
+  <h2 id="loop"><span class="num">9</span>The training loop</h2>
+  <p>With a single step defined, training is just calling it a few thousand times and logging every
+  hundredth step. That is the whole driver:</p>
+  <pre><code class="language-python">for step in range(steps):
+    model, history = train_step(step)
+    if step % 100 == 0:
+        print(
+            f&quot;step {step:4d}  reward {history[&#x27;reward&#x27;][-1]:+.3f}  &quot;
+            f&quot;acc {history[&#x27;accuracy&#x27;][-1]:.2f}  fmt {history[&#x27;format&#x27;][-1]:.2f}  &quot;
+            f&quot;kl {history[&#x27;kl&#x27;][-1]:.4f}  ent {history[&#x27;entropy&#x27;][-1]:.3f}&quot;
+        )</code></pre>
+  <div class="term"><span class="cap">stdout &mdash; reward climbs from &minus;0.08 to ~0.8 and exact-match accuracy from 0% to ~80%:</span><pre>step    0  reward -0.084  acc 0.00  fmt 0.06  kl 0.0988  ent 2.616
+step  100  reward +0.246  acc 0.14  fmt 0.60  kl 1.4993  ent 1.424
+step  200  reward +0.482  acc 0.40  fmt 0.71  kl 0.1782  ent 0.875
+step  300  reward +0.488  acc 0.42  fmt 0.72  kl 0.0023  ent 0.834
+step  400  reward +0.513  acc 0.40  fmt 0.72  kl 0.4457  ent 0.550
+step  500  reward +0.636  acc 0.55  fmt 0.81  kl 0.1934  ent 0.359
+step  600  reward +0.661  acc 0.59  fmt 0.82  kl 0.0019  ent 0.348
+step  700  reward +0.690  acc 0.68  fmt 0.75  kl 0.0611  ent 0.349
+step  800  reward +0.678  acc 0.64  fmt 0.79  kl 0.0203  ent 0.360
+step  900  reward +0.712  acc 0.65  fmt 0.83  kl 0.0026  ent 0.313
+step 1000  reward +0.800  acc 0.77  fmt 0.88  kl 0.0046  ent 0.218
+step 1100  reward +0.734  acc 0.71  fmt 0.81  kl 0.0014  ent 0.293
+step 1200  reward +0.792  acc 0.80  fmt 0.82  kl 0.0001  ent 0.296</pre></div>
+  <p>In a couple of minutes the policy goes from emitting random tokens (6% well-formed at step 0) to
+  solving roughly four out of five addition problems exactly &mdash; learned entirely from the scalar
+  reward, with no labeled answers ever shown to the model.</p>
+
+  <h2 id="results"><span class="num">10</span>Results: reading the metrics</h2>
+  <p>Nine panels tell the story of the run. They are meant to be read together &mdash; this is exactly
+  the dashboard you watch on a real GRPO job.</p>
+  <figure>
+    <img src="grpo_metrics.png" alt="Nine-panel grid of GRPO training metrics over ~1200 steps: reward, accuracy and format, KL, entropy, zero-variance groups, advantage std, clip fraction, gradient norm, and response length.">
+    <figcaption>GRPO training metrics on the toy <code>a+b=?</code> task.</figcaption>
+  </figure>
+  <ul>
+    <li><strong>Reward &amp; accuracy</strong> rise and plateau together &mdash; the headline that
+    learning is working. Format-rate saturates first (easy), exact correctness follows (hard).</li>
+    <li><strong>KL(policy&nbsp;&#8214;&nbsp;reference)</strong> spikes during the fast-learning phase,
+    then settles toward zero after each reference re-sync &mdash; the leash doing its job.</li>
+    <li><strong>Entropy</strong> decays smoothly from ~2.6 nats (near-uniform over the vocabulary) as
+    the policy sharpens around correct answers. A gradual decay, not a cliff, is what you want.</li>
+    <li><strong>Zero-variance groups</strong> climb toward 1 as more groups become all-correct. Here
+    that is <em>genuine convergence</em> (accuracy is high); the same curve with mediocre accuracy
+    would instead signal a collapse of the learning signal.</li>
+    <li><strong>Advantage std, clip fraction, and gradient norm</strong> stay bounded &mdash; the
+    trust region and gradient clipping are keeping each update stable. Mean response length holds
+    steady, so there's no length-bias reward hacking.</li>
+  </ul>
+
+  <hr>
+  <p>That's GRPO end to end: rollout, group-relative advantage, the clipped surrogate, and the KL and
+  entropy regularizers &mdash; the same machinery that trains frontier reasoning models, shrunk to
+  something you can read in one sitting. To take it further, swap the toy reward for a real
+  verifier and the TinyGPT policy for a pretrained model; the structure of the loop does not change.
+  For the metric-by-metric debugging guide and every configuration knob worth tuning, see the
+  <a href="grpo.html">companion GRPO reference</a>.</p>
+
+  <div class="footer">
+    Code adapted and refined from a from-scratch GRPO notebook &middot; toy addition task (<code>a+b=?</code>).
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
+</body>
+</html>
