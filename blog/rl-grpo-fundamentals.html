@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>RL &amp; GRPO Fundamentals</title>
 <meta name="description" content="The math behind training language models with reinforcement learning: policy gradients, importance sampling, the surrogate objective, trust regions and clipping, advantages and the critic, PPO vs. GRPO, KL and entropy regularization, and the full GRPO objective.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
 <script>
   window.MathJax = {
     tex: {
@@ -123,6 +125,16 @@
     border-left: 3px solid var(--accent); border-radius: 8px;
     padding: .2em 1.1em; margin: 1.3em 0; overflow-x: auto; }
 
+  /* formula-to-code bridge */
+  .codemap { margin: 1.1em 0 1.5em; }
+  .codemap .cl { font-weight: 700; font-size: .72rem; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--an-fg); margin: 0 0 .35em; }
+  .codemap .cl code { font-size: .82em; text-transform: none; letter-spacing: 0;
+    font-weight: 600; background: none; color: inherit; padding: 0; }
+  .codemap pre { margin: .15em 0 0; }
+  .codemap .cw { font-size: .92rem; color: var(--muted); margin: .55em 0 0; }
+  pre code.hljs { background: transparent; padding: 0; }
+
   /* MathJax display blocks scroll on small screens */
   mjx-container[display="true"] { overflow-x: auto; overflow-y: hidden; max-width: 100%;
     padding: 3px 0; }
@@ -157,7 +169,7 @@
   <div class="meta">
     <span class="tag">RL</span><span class="tag">GRPO</span><span class="tag">PPO</span><span class="tag">Theory</span>
     <span class="dot">&middot;</span><span>June 2026</span>
-    <span class="dot">&middot;</span><span>~22 min read</span>
+    <span class="dot">&middot;</span><span>~25 min read</span>
   </div>
 
   <p class="lead">Reinforcement learning gives a language model something supervised fine-tuning cannot:
@@ -215,12 +227,39 @@
   \(J(\theta)\) is just the average score the model would earn across all such problems &mdash; the
   single number we are trying to push upward.</p>
 
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>compute_reward()</code> and the batch mean</div>
+    <pre><code class="language-python">def compute_reward(completion_tokens, answer):
+    ...
+    if abs(val - answer) &lt; 0.001:
+        return 1.0, ...          # exact total  ->  R = 1
+    return 0.1 + 0.5 * math.exp(-abs(val - answer) / 3.0), ...   # graded partial credit
+
+rewards = torch.tensor(rewards_list, ...)         # R(q, o) for every completion
+history["reward"].append(rewards.mean().item())   # sample-average estimate of E[R] = J</code></pre>
+    <p class="cw">We can never take the true expectation, so \(J(\theta)\) is estimated by averaging
+    the reward over the batch of sampled completions. <code>compute_reward</code> <em>is</em> the
+    definition of \(R(q,o)\) for this task.</p>
+  </div>
+
   <p>We cannot backpropagate through the sampling step directly. The <strong>policy gradient
   theorem</strong> (the log-derivative trick) rewrites the gradient of the objective as an
   expectation we <em>can</em> estimate from samples:</p>
 
   <div class="keyeq">
   \[ \nabla_\theta J(\theta) \;=\; \mathbb{E}_{\,o \sim \pi_\theta}\big[\,R(q,o)\,\nabla_\theta \log \pi_\theta(o \mid q)\,\big]. \]
+  </div>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; the gradient comes from autograd</div>
+    <pre><code class="language-python"># log π_θ(o_t | q, earlier tokens) for the token actually sampled (per_token_logprobs):
+logprobs = logprobs_all.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
+...
+loss.backward()   # the ∇log π factor is produced by backprop; no manual gradient</code></pre>
+    <p class="cw">The code never writes \(R\,\nabla\log\pi\) out by hand. It computes
+    \(\log\pi_\theta\) of each sampled token with <code>log_softmax(...).gather(...)</code>, folds it
+    into a differentiable loss (the surrogate of &sect;2), and calls <code>loss.backward()</code> &mdash;
+    autograd supplies the \(\nabla\log\pi\) term.</p>
   </div>
 
   <div class="analogy"><span class="alabel">Analogy.</span> This is animal training by reward. When a
@@ -281,12 +320,34 @@
   far from \(1\) means the policy has moved a lot &mdash; and, as we'll see, that is exactly where the
   estimate becomes dangerous.</p>
 
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python"># log-probs of the same tokens under the current and the frozen "old" policy:
+cur_logprobs, _, _ = per_token_logprobs(model, generated_sequences, ...)   # carries gradient
+old_logprobs, _, _ = per_token_logprobs(model, generated_sequences, ...)   # under torch.no_grad()
+
+ratio = torch.exp(cur_logprobs - old_logprobs)   # ρ_t = exp(log π_θ - log π_old) = π_θ / π_old</code></pre>
+    <p class="cw">This is the concrete, per-token form of the importance-sampling identity above.
+    Probabilities are kept in log-space for stability, so the quotient becomes a subtraction and
+    <code>exp</code> restores the ratio. <code>old_logprobs</code> is captured once per rollout under
+    <code>no_grad</code>, so only the current policy contributes gradient.</p>
+  </div>
+
   <p>Weighting each sample by its ratio gives the <strong>surrogate objective</strong> &mdash; an
   off-policy estimate of expected reward, expressed with the advantage \(\hat{A}_t\) (the
   variance-reduced stand-in for \(R\) that we build in &sect;4):</p>
 
   <div class="keyeq">
   \[ L^{\text{IS}}(\theta) \;=\; \mathbb{E}_{t}\big[\,\rho_t(\theta)\,\hat{A}_t\,\big]. \]
+  </div>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">surrogate1 = ratio * advantages.unsqueeze(1)   # ρ_t * Â_t, broadcast over a completion's tokens</code></pre>
+    <p class="cw">The product \(\rho_t\,\hat{A}_t\) is one line; <code>advantages</code> is a single
+    number per completion, and <code>unsqueeze(1)</code> broadcasts it across that completion's tokens.
+    The outer expectation \(\mathbb{E}_t\) becomes the masked average taken later when the loss is
+    formed (&sect;8). (This raw term is the one PPO's clip will tame in &sect;3.)</p>
   </div>
 
   <p>This object has a crucial property: at \(\theta = \theta_{\text{old}}\) every ratio equals
@@ -311,6 +372,13 @@
   \[ \max_{\theta}\; \mathbb{E}_t\big[\rho_t(\theta)\,\hat{A}_t\big] \quad \text{subject to}\quad \mathbb{E}\big[D_{\mathrm{KL}}(\pi_{\theta_{\text{old}}} \,\|\, \pi_\theta)\big] \le \delta. \]
   </div>
 
+  <div class="codemap">
+    <div class="cl">Not in the notebook</div>
+    <p class="cw">TRPO's constrained solve never appears in the code &mdash; the second-order machinery
+    it needs is impractical at this scale. The notebook implements PPO's clip below instead, which
+    approximates the same trust region with a single <code>torch.clamp</code>.</p>
+  </div>
+
   <p>This trust-region constraint works, but enforcing it requires second-order machinery (conjugate
   gradients, the Fisher matrix) that is awkward at LLM scale. <strong>PPO</strong> replaces the hard
   constraint with a cheap, first-order surrogate that simply <strong>clips</strong> the ratio into the
@@ -318,6 +386,17 @@
 
   <div class="keyeq">
   \[ L^{\text{CLIP}}(\theta) \;=\; \mathbb{E}_t\Big[\min\big(\rho_t\,\hat{A}_t,\; \operatorname{clip}(\rho_t,\, 1-\epsilon,\, 1+\epsilon)\,\hat{A}_t\big)\Big]. \]
+  </div>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">surrogate1 = ratio * advantages.unsqueeze(1)
+surrogate2 = torch.clamp(ratio, 1 - clip_eps, 1 + clip_eps) * advantages.unsqueeze(1)
+policy_loss = -torch.min(surrogate1, surrogate2)   # pessimistic branch; '-' = descend a loss</code></pre>
+    <p class="cw"><code>torch.clamp</code> is the \(\operatorname{clip}(\rho,\,1-\epsilon,\,1+\epsilon)\),
+    <code>torch.min</code> picks the pessimistic of the two branches, and the leading minus turns the
+    objective we want to <em>maximize</em> into a loss to <em>minimize</em>. In the config
+    <code>clip_eps = 0.2</code>.</p>
   </div>
 
   <p>Read the two cases through the \(\min\):</p>
@@ -379,6 +458,16 @@
   \[ \delta_t = r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t), \qquad \hat{A}_t^{\text{GAE}} = \sum_{l \ge 0} (\gamma\lambda)^l\,\delta_{t+l}. \]
   </div>
 
+  <div class="codemap">
+    <div class="cl">Not in the notebook &mdash; GRPO is critic-free</div>
+    <pre><code class="language-python"># No V_φ network, no Q, no δ_t, no GAE sum anywhere in the code.
+# The only learned model is the policy; the baseline comes from sampling (section 5):
+mean = grouped.mean(dim=1, keepdim=True)   # the group mean stands in for V(q)</code></pre>
+    <p class="cw">\(V\), \(Q\), and the GAE recursion are PPO machinery; the toy notebook implements
+    none of them. GRPO replaces this whole block &mdash; a second network plus a multi-step return
+    estimate &mdash; with one line of group statistics, the subject of the next section.</p>
+  </div>
+
   <p>The critic is a second network, usually about the size of the policy, trained by regression to
   predict returns &mdash; like a seasoned coach who watches a position and calls the likely final
   score, earning that judgement by checking prediction after prediction against what actually happened.
@@ -399,6 +488,20 @@
 
   <div class="keyeq">
   \[ \hat{A}_{i,t} \;=\; \frac{r_i - \operatorname{mean}(r_1, \dots, r_G)}{\operatorname{std}(r_1, \dots, r_G)} \qquad \text{for all tokens } t \text{ in } o_i. \]
+  </div>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">grouped = rewards.view(-1, group_size)      # (B, G): one row of rewards per prompt
+mean = grouped.mean(dim=1, keepdim=True)    # group baseline  (this is the "V")
+std  = grouped.std(dim=1, keepdim=True)
+advantages = ((grouped - mean) / (std + adv_eps)).view(-1)   # Â_i, standardized in-group
+# Dr. GRPO variant: advantages = (grouped - mean).view(-1)   # drop the /std</code></pre>
+    <p class="cw"><code>rewards.view(-1, group_size)</code> reshapes the flat \((B\cdot G,)\) rewards
+    into \((B, G)\) so each row is one prompt's group; <code>mean</code>/<code>std</code> reduce along
+    the group axis; <code>view(-1)</code> flattens back to one number per completion. That single
+    \(\hat{A}_i\) is the value broadcast across a completion's tokens in &sect;2's
+    <code>surrogate1</code>.</p>
   </div>
 
   <div class="analogy"><span class="alabel">Analogy.</span> PPO hires a professional appraiser &mdash;
@@ -470,8 +573,17 @@
   negative, yet the naive \(k_1\) estimate dips below zero on individual tokens &mdash; like a tape
   measure that occasionally reads less than zero: right on average, maddening in practice. Because
   \(e^{s} - s - 1 \ge 0\) for every \(s\), \(k_3\) reads \(\ge 0\) every time and carries lower
-  variance. In the <a href="grpo-from-scratch.html">code</a> it is a single line:</p>
-  <pre><code>kl = torch.exp(ref_logprob - cur_logprob) - (ref_logprob - cur_logprob) - 1</code></pre>
+  variance.</p>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python"># s = log(π_ref / π_θ) = ref_logprobs - cur_logprobs   (per token)
+kl = torch.exp(ref_logprobs - cur_logprobs) - (ref_logprobs - cur_logprobs) - 1   # k3: e^s - s - 1</code></pre>
+    <p class="cw">The per-token log-ratio \(s\) is exactly <code>ref_logprobs - cur_logprobs</code>, and
+    the estimator is \(e^{s}-s-1\). The intractable sequence-level \(D_{\mathrm{KL}}\) above is never
+    formed; this sampled per-token value is averaged into the loss instead.
+    <code>ref_logprobs</code> comes from the frozen reference model under <code>no_grad</code>.</p>
+  </div>
 
   <p>The penalty can be applied two ways: subtracted from the reward before computing advantages
   (classic RLHF), or added as a separate loss term weighted by \(\beta\) (common in modern GRPO). The
@@ -494,6 +606,15 @@
 
   <div class="keyeq">
   \[ \mathcal{H}\big(\pi_\theta(\cdot \mid s)\big) \;=\; -\sum_{a} \pi_\theta(a \mid s)\,\log \pi_\theta(a \mid s). \]
+  </div>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>per_token_logprobs()</code></div>
+    <pre><code class="language-python">policy_dist = dist.Categorical(logits=logits[:, :-1, :])
+entropy = policy_dist.entropy()    # H = -Σ π log π, per position, computed stably</code></pre>
+    <p class="cw">Rather than coding \(-\sum_a \pi\log\pi\) by hand (which underflows easily), the
+    notebook wraps the logits in a <code>Categorical</code> distribution and calls its
+    <code>.entropy()</code> &mdash; the sum over the vocabulary \(a\) happens inside.</p>
   </div>
 
   <p>Adding \(+\,\alpha\,\mathcal{H}\) to the objective rewards keeping options open &mdash; it fights
@@ -537,6 +658,19 @@
   token too far in one step (the clip), don't drift too far from the trusted reference model (the KL),
   and keep enough randomness to stay curious (the entropy).</em></div>
 
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">per_token_loss = policy_loss + kl_beta * kl - alpha * entropy
+tokens_per_sequence = completion_mask.sum(1).clamp(1)
+loss = ((per_token_loss * completion_mask).sum(1) / tokens_per_sequence).mean()</code></pre>
+    <p class="cw">The three terms map one-to-one to the objective: <code>policy_loss</code> is the
+    \(-\min(\cdot)\) surrogate, <code>+ kl_beta * kl</code> is the \(\beta\,\hat{D}_{\mathrm{KL}}\)
+    leash, and <code>- alpha * entropy</code> is the \(\alpha\,\mathcal{H}\) bonus. The masked
+    <code>.sum(1) / tokens_per_sequence</code> then <code>.mean()</code> are the \(\tfrac{1}{|o_i|}\)
+    and \(\tfrac{1}{G}\) averages. The signs are already arranged so plain <code>loss.backward()</code>
+    ascends \(\mathcal{J}_{\text{GRPO}}\).</p>
+  </div>
+
   <p>Optimizers minimize, so an implementation descends \(-\mathcal{J}_{\text{GRPO}}\). The two inner
   averages &mdash; over tokens \(\tfrac{1}{|o_i|}\) and over the group \(\tfrac{1}{G}\) &mdash; are not
   innocent: how you aggregate the per-token loss is itself a design choice with real consequences for
@@ -553,6 +687,17 @@
   that generated the batch, so the ratios drift, clipping fires more, and the estimate degrades. Keep
   \(\mu\) small (often \(1\)&ndash;\(4\)) and watch the approximate KL between the current and rollout
   policy; if it grows across epochs, the rollouts are too stale.</p>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">for _ in range(inner_epochs):     # μ gradient passes over the same rollout batch
+    cur_logprobs, entropy, completion_mask = per_token_logprobs(...)
+    ratio = torch.exp(cur_logprobs - old_logprobs)   # drifts from 1 as the epochs progress
+    ...</code></pre>
+    <p class="cw">Only <code>cur_logprobs</code> is recomputed each pass; <code>old_logprobs</code> and
+    <code>advantages</code> are frozen, so the ratio drifts further from \(1\) with every inner epoch.
+    Here <code>inner_epochs = 2</code>.</p>
+  </div>
 
   <h3>Group size and batch size</h3>
   <p>Larger \(G\) gives a lower-variance baseline and advantage (&sect;5) and broader exploration per
@@ -572,10 +717,29 @@
   (&sect;7) and is best annealed high&rarr;low. When training a strong SFT model these can be small;
   from-scratch toy runs need much larger values.</p>
 
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">frac = step / steps
+alpha = ent_coef * max(0.0, 1.0 - frac / 0.8) + 0.003     # entropy weight α, annealed to a floor
+...
+per_token_loss = policy_loss + kl_beta * kl - alpha * entropy   # β = kl_beta is constant</code></pre>
+    <p class="cw"><code>kl_beta</code> (\(\beta = 0.02\)) stays constant, while <code>alpha</code>
+    (\(\alpha\), seeded by <code>ent_coef = 0.08</code>) is linearly annealed toward a small floor
+    &mdash; much exploration early, little late.</p>
+  </div>
+
   <h3>Reference synchronization</h3>
   <p>Fine-tuning a capable model usually keeps \(\pi_{\text{ref}}\) fixed at the SFT checkpoint &mdash; a
   trustworthy anchor. Training from scratch, anchoring to a random init fights learning, so the
   reference is periodically re-synced to the current policy: a moving leash rather than a fixed one.</p>
+
+  <div class="codemap">
+    <div class="cl">In the notebook &mdash; <code>train_step()</code></div>
+    <pre><code class="language-python">if ref_sync_every and (step + 1) % ref_sync_every == 0:
+    ref_model.load_state_dict(model.state_dict())   # move the anchor π_ref to the current policy</code></pre>
+    <p class="cw">Every <code>ref_sync_every = 150</code> steps the frozen reference is copied from the
+    current policy &mdash; the moving anchor used here because training starts from scratch.</p>
+  </div>
 
   <h3>Optimization stability</h3>
   <p>Standard guards apply: a small learning rate with warmup and cosine decay, and global gradient-norm
@@ -609,5 +773,7 @@
   </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js" id="MathJax-script" async></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>hljs.highlightAll();</script>
 </body>
 </html>
