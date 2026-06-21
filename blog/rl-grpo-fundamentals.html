@@ -21,6 +21,7 @@
     --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
     --code-fg: #b3266b; --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
     --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --an-bg: #ecf8f1; --an-bd: #bfe3d0; --an-fg: #15734c;
     --table-head: #f3f5f7; --maxw: 880px;
   }
   @media (prefers-color-scheme: dark) {
@@ -29,6 +30,7 @@
       --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
       --code-fg: #ff7bbf; --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
       --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff; --table-head: #161b22;
+      --an-bg: #0e1f17; --an-bd: #285339; --an-fg: #56cf92;
     }
   }
   * { box-sizing: border-box; }
@@ -109,10 +111,12 @@
   }
 
   /* callouts */
-  .note, .idea { border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .97rem; }
+  .note, .idea, .analogy { border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .97rem; }
   .note { background: var(--note-bg); border: 1px solid var(--note-bd); }
   .idea { background: var(--num-bg); border: 1px solid var(--num-bd); border-left: 3px solid var(--accent); }
-  .note strong, .idea strong { font-weight: 700; }
+  .analogy { background: var(--an-bg); border: 1px solid var(--an-bd); border-left: 3px solid var(--an-fg); }
+  .note strong, .idea strong, .analogy strong { font-weight: 700; }
+  .analogy .alabel { font-weight: 700; color: var(--an-fg); }
 
   /* key equation box */
   .keyeq { background: var(--row-alt); border: 1px solid var(--border-soft);
@@ -153,7 +157,7 @@
   <div class="meta">
     <span class="tag">RL</span><span class="tag">GRPO</span><span class="tag">PPO</span><span class="tag">Theory</span>
     <span class="dot">&middot;</span><span>June 2026</span>
-    <span class="dot">&middot;</span><span>~18 min read</span>
+    <span class="dot">&middot;</span><span>~22 min read</span>
   </div>
 
   <p class="lead">Reinforcement learning gives a language model something supervised fine-tuning cannot:
@@ -162,6 +166,13 @@
   behind DeepSeek-R1 and much of today's reasoning-model wave, and it is best understood as the
   endpoint of a short chain of ideas &mdash; policy gradients, importance sampling, trust regions,
   and baselines &mdash; where each link fixes a flaw in the one before it.</p>
+
+  <div class="analogy"><span class="alabel">Analogy.</span> Supervised fine-tuning is a student
+  memorizing worked solutions from a textbook &mdash; copy the reference answer, token by token.
+  Reinforcement learning is that same student sitting an exam: they attempt each problem their own
+  way, get back only a <em>grade</em>, and must work out for themselves which of their choices earned
+  it. That shift &mdash; from imitating answers to being scored on your own attempts &mdash; is what
+  lets RL push a model <em>past</em> the demonstrations it was trained on.</div>
 
   <p>This post builds that chain from the ground up, with the formulas, and ends at the full GRPO
   objective and the practices that keep it stable. It is the conceptual companion to two hands-on
@@ -197,6 +208,13 @@
   \[ J(\theta) \;=\; \mathbb{E}_{\,q \sim \mathcal{D},\; o \sim \pi_\theta(\cdot \mid q)}\big[\,R(q, o)\,\big]. \]
   </div>
 
+  <p>Make that concrete with the toy task from the
+  <a href="grpo-from-scratch.html">walkthrough</a>: the prompt is \(q=\) &ldquo;3+4=&rdquo;, the policy
+  samples a completion such as \(o=\) &ldquo;7&lt;eos&gt;&rdquo;, and the reward is \(R=1\) for the
+  correct total (a small penalty for &ldquo;8&rdquo;, or for output that isn't a clean number).
+  \(J(\theta)\) is just the average score the model would earn across all such problems &mdash; the
+  single number we are trying to push upward.</p>
+
   <p>We cannot backpropagate through the sampling step directly. The <strong>policy gradient
   theorem</strong> (the log-derivative trick) rewrites the gradient of the objective as an
   expectation we <em>can</em> estimate from samples:</p>
@@ -205,12 +223,19 @@
   \[ \nabla_\theta J(\theta) \;=\; \mathbb{E}_{\,o \sim \pi_\theta}\big[\,R(q,o)\,\nabla_\theta \log \pi_\theta(o \mid q)\,\big]. \]
   </div>
 
+  <div class="analogy"><span class="alabel">Analogy.</span> This is animal training by reward. When a
+  behavior happens to be followed by a treat, you do more of it. The \(\nabla_\theta \log \pi_\theta\)
+  term is precisely &ldquo;do more of whatever made this completion likely,&rdquo; and the reward
+  \(R\) decides the sign &mdash; treat or no treat. Nobody hands the model the correct answer; it only
+  learns whether what it tried scored well.</div>
+
   <p>The intuition is simple: nudge \(\theta\) to raise the log-probability of completions that earned
   high reward and lower it for the rest. This estimator &mdash; <strong>REINFORCE</strong> &mdash; is
   unbiased but almost unusable in practice for two reasons:</p>
   <ul>
     <li><strong>Crushing variance.</strong> A single scalar \(R\) multiplies the gradient of an entire
-    sequence, with no sense of <em>which</em> tokens deserved credit.</li>
+    sequence, with no sense of <em>which</em> tokens deserved credit &mdash; like grading a 200-word
+    proof with one final thumbs-up and asking the writer to guess which sentences earned it.</li>
     <li><strong>It is on-policy.</strong> The expectation is over \(\pi_\theta\), so every gradient step
     in principle needs freshly sampled completions &mdash; sampling from an LLM is the expensive part.</li>
   </ul>
@@ -235,6 +260,13 @@
   \[ \mathbb{E}_{x \sim p}\big[f(x)\big] \;=\; \mathbb{E}_{x \sim \pi_{\theta_{\text{old}}}}\!\left[\frac{p(x)}{\pi_{\theta_{\text{old}}}(x)}\,f(x)\right]. \]
   </div>
 
+  <div class="analogy"><span class="alabel">Analogy.</span> Importance sampling is what pollsters do
+  when their sample doesn't match the population they care about. If a survey happened to catch too
+  many young voters, you don't re-run it &mdash; you <em>re-weight</em> each response by how over- or
+  under-represented it is. Here the &ldquo;sample&rdquo; is the batch of completions
+  \(\pi_{\theta_{\text{old}}}\) already produced, the &ldquo;population&rdquo; is the policy
+  \(\pi_\theta\) we now want to evaluate, and the ratio is that re-weighting factor.</div>
+
   <p>Applied to the policy gradient, the correction factor is the <strong>importance sampling
   ratio</strong> &mdash; the per-token probability the new policy assigns to the token actually
   sampled, divided by the old policy's:</p>
@@ -242,6 +274,12 @@
   <div class="keyeq">
   \[ \rho_t(\theta) \;=\; \frac{\pi_\theta(o_t \mid q, o_{&lt;t})}{\pi_{\theta_{\text{old}}}(o_t \mid q, o_{&lt;t})}. \]
   </div>
+
+  <p>For example, if the old policy gave the sampled token probability \(0.2\) and the current policy
+  now assigns it \(0.4\), then \(\rho_t = 2\): that token counts <em>double</em>, because the policy we
+  are optimizing is twice as likely to produce it. A ratio near \(1\) means little has changed there;
+  far from \(1\) means the policy has moved a lot &mdash; and, as we'll see, that is exactly where the
+  estimate becomes dangerous.</p>
 
   <p>Weighting each sample by its ratio gives the <strong>surrogate objective</strong> &mdash; an
   off-policy estimate of expected reward, expressed with the advantage \(\hat{A}_t\) (the
@@ -262,8 +300,12 @@
   keep the step small &mdash; which is precisely the job of the trust region.</div>
 
   <h2 id="trust"><span class="num">3</span>Trust region &amp; clipping</h2>
-  <p>The principled fix is <strong>TRPO</strong>: maximize the surrogate subject to a hard limit on how
-  far the policy may move, measured in KL divergence:</p>
+  <p>A <em>trust region</em> is the radius within which you still trust a local approximation. A flat
+  street map is perfect for walking across your city but useless for plotting a flight across the
+  globe; the surrogate of &sect;2 is the same &mdash; trustworthy near \(\pi_{\theta_{\text{old}}}\),
+  misleading far from it. So we cap how far each update may travel. The principled fix is
+  <strong>TRPO</strong>: maximize the surrogate subject to a hard limit on how far the policy may
+  move, measured in KL divergence:</p>
 
   <div class="keyeq">
   \[ \max_{\theta}\; \mathbb{E}_t\big[\rho_t(\theta)\,\hat{A}_t\big] \quad \text{subject to}\quad \mathbb{E}\big[D_{\mathrm{KL}}(\pi_{\theta_{\text{old}}} \,\|\, \pi_\theta)\big] \le \delta. \]
@@ -285,9 +327,18 @@
     <li>When \(\hat{A}_t \lt 0\) (worse-than-average), the term is capped once
     \(\rho_t \le 1-\epsilon\): no runaway suppression.</li>
   </ul>
+  <p>Worked example: take \(\epsilon = 0.2\) and a good token (\(\hat{A}_t \gt 0\)). Suppose one
+  over-eager update would send its ratio to \(\rho_t = 1.8\). The clip caps the term at
+  \(1+\epsilon = 1.2\), so beyond that the gradient flattens &mdash; the policy is told &ldquo;you've
+  moved this token far enough for one step.&rdquo;</p>
   <p>The \(\min\) makes \(L^{\text{CLIP}}\) a <em>pessimistic lower bound</em> on the unclipped
   surrogate, removing any incentive to move \(\rho_t\) outside the band. The result keeps each update
   inside an implicit trust region with nothing but an element-wise clamp.</p>
+
+  <div class="analogy"><span class="alabel">Analogy.</span> Clipping is the governor on an engine, or a
+  spotter at the gym who won't let you add more than a set amount of weight in one session. Even on a
+  day you feel unstoppable, the rule caps how far you move in a single step &mdash; not because more is
+  always wrong, but because the estimate you're trusting only holds nearby.</div>
 
   <div class="idea"><strong>Two different leashes.</strong> Clipping bounds how far the policy moves
   <em>per update</em> from \(\pi_{\theta_{\text{old}}}\) (which is refreshed every rollout). The KL
@@ -304,12 +355,19 @@
   \[ V^\pi(s) = \mathbb{E}_\pi\big[\,G_t \mid s_t = s\,\big], \qquad Q^\pi(s,a) = \mathbb{E}_\pi\big[\,G_t \mid s_t = s,\, a_t = a\,\big]. \]
   </div>
 
-  <p>\(V^\pi(s)\) is the expected reward from state \(s\) under the policy; \(Q^\pi(s,a)\) is the
-  expected reward if we take action \(a\) first. Their difference is the <strong>advantage</strong>:</p>
+  <p>\(V^\pi(s)\) is the expected reward from state \(s\) under the policy &mdash; think of it as
+  &ldquo;par&rdquo; for that hole in golf; \(Q^\pi(s,a)\) is the expected reward if you play one
+  particular shot first. Their difference is the <strong>advantage</strong>:</p>
 
   <div class="keyeq">
   \[ A^\pi(s,a) \;=\; Q^\pi(s,a) - V^\pi(s). \]
   </div>
+
+  <div class="analogy"><span class="alabel">Analogy.</span> The advantage is grading on a curve. A raw
+  score of \(80\) tells you little until you know the class average: \(80\) in a class averaging
+  \(50\) is excellent (\(+30\)); the same \(80\) where everyone scored \(95\) is poor (\(-15\)).
+  \(V^\pi(s)\) is that class average for the situation at hand, and \(A = Q - V\) is how far above or
+  below it your action lands &mdash; positive means &ldquo;do more of this.&rdquo;</div>
 
   <p>The advantage answers exactly the right question &mdash; &ldquo;how much better than average is
   this action here?&rdquo; Using \(V^\pi(s)\) as the baseline is what makes the policy gradient
@@ -322,8 +380,10 @@
   </div>
 
   <p>The critic is a second network, usually about the size of the policy, trained by regression to
-  predict returns. It is the engine of PPO's variance reduction &mdash; and, as we are about to see,
-  its cost is exactly what GRPO removes.</p>
+  predict returns &mdash; like a seasoned coach who watches a position and calls the likely final
+  score, earning that judgement by checking prediction after prediction against what actually happened.
+  It is the engine of PPO's variance reduction &mdash; and, as we are about to see, its cost is exactly
+  what GRPO removes.</p>
 
   <h2 id="ppo-grpo"><span class="num">5</span>PPO vs. GRPO: dropping the critic</h2>
   <p>For LLMs the critic is painful: it doubles the trainable footprint, and learning an accurate
@@ -341,10 +401,24 @@
   \[ \hat{A}_{i,t} \;=\; \frac{r_i - \operatorname{mean}(r_1, \dots, r_G)}{\operatorname{std}(r_1, \dots, r_G)} \qquad \text{for all tokens } t \text{ in } o_i. \]
   </div>
 
+  <div class="analogy"><span class="alabel">Analogy.</span> PPO hires a professional appraiser &mdash;
+  the critic &mdash; to put a value on every move; it's accurate but costly, and the appraiser itself
+  has to be trained and can be wrong. GRPO fires the appraiser and <em>grades on a curve</em> instead:
+  have the model attempt the same prompt several times and score each attempt against the average of
+  its own siblings. It's a teacher with no answer key who asks sixteen students to solve one problem
+  and rewards everyone who beats the class average.</div>
+
   <p>That is the whole trick. The group mean plays the role of \(V^\pi\); the comparison across
   siblings supplies the credit signal that PPO gets from its critic. Crucially, GRPO then plugs this
   \(\hat{A}_{i,t}\) into the <em>same</em> clipped surrogate from &sect;3 &mdash; ratio, clip,
   pessimistic \(\min\), all identical. <strong>Only the advantage estimator changed.</strong></p>
+
+  <p>A concrete pass: for \(q=\) &ldquo;7+5=&rdquo;, sample \(G = 8\) completions and score them, say
+  \(r = [\,1,\ 1,\ -0.1,\ 1,\ 0.1,\ 1,\ 0,\ 1\,]\) with mean \(\approx 0.63\). The completion that
+  answered &ldquo;12&rdquo; gets advantage \(1 - 0.63 = +0.37\) and is pushed up; the one that answered
+  &ldquo;11&rdquo; gets \(0.1 - 0.63 = -0.53\) and is pushed down; a malformed completion gets
+  \(-0.73\). Every token of a completion inherits that one number. No critic was ever consulted
+  &mdash; the siblings <em>are</em> the baseline.</p>
 
   <div class="tablewrap">
   <table>
@@ -368,13 +442,21 @@
   <h2 id="kl"><span class="num">6</span>Regularization I: KL to a reference</h2>
   <p>The reward is only a <em>proxy</em> for what we actually want. Maximize it without restraint and
   the policy drifts into degenerate text, forgets general capability, or discovers exploits that score
-  well without being good (<em>reward hacking</em>). The guard is a <strong>KL penalty</strong> that
-  anchors the policy to a frozen <strong>reference</strong> \(\pi_{\text{ref}}\) (typically the SFT or
-  initial model):</p>
+  well without being good (<em>reward hacking</em> &mdash; think of a cleaning robot rewarded for
+  &ldquo;no visible mess&rdquo; that learns to sweep the dirt under the rug, or a model graded by a
+  length-loving reward model that simply writes longer and longer). The guard is a
+  <strong>KL penalty</strong> that anchors the policy to a frozen <strong>reference</strong>
+  \(\pi_{\text{ref}}\) (typically the SFT or initial model):</p>
 
   <div class="keyeq">
   \[ D_{\mathrm{KL}}(\pi_\theta \,\|\, \pi_{\text{ref}}) \;=\; \mathbb{E}_{x \sim \pi_\theta}\!\left[\log \frac{\pi_\theta(x)}{\pi_{\text{ref}}(x)}\right]. \]
   </div>
+
+  <div class="analogy"><span class="alabel">Analogy.</span> The KL penalty is a leash. Chasing reward
+  is exploring an unfamiliar city for the best restaurant; the leash to \(\pi_{\text{ref}}\) keeps you
+  from wandering so far that you forget the language you arrived speaking. Pull it too tight (large
+  \(\beta\)) and you can't explore at all; leave it too slack (small \(\beta\)) and the policy can
+  drift into gibberish that merely happens to score well.</div>
 
   <p>We never have full distributions over sequences &mdash; only the tokens we sampled &mdash; so KL
   must be <em>estimated</em> per token. Writing the log-ratio \(s = \log\frac{\pi_{\text{ref}}(x)}{\pi_\theta(x)}\)
@@ -384,10 +466,11 @@
   \[ \underbrace{\hat{D}_{\text{KL}}^{k_1} = -\,s}_{\text{unbiased, high variance, can be negative}} \qquad\qquad \underbrace{\hat{D}_{\text{KL}}^{k_3} = e^{s} - s - 1}_{\text{unbiased, always } \ge 0,\ \text{low variance}}. \]
   </div>
 
-  <p>The <strong>k3 estimator</strong> is the modern default: because \(e^{s} - s - 1 \ge 0\) for all
-  \(s\), it never produces the negative per-token &ldquo;KL&rdquo; values that destabilize training,
-  and it has lower variance than the naive log-ratio. In the
-  <a href="grpo-from-scratch.html">code</a> it is a single line:</p>
+  <p>The <strong>k3 estimator</strong> is the modern default. KL is a distance and can never truly be
+  negative, yet the naive \(k_1\) estimate dips below zero on individual tokens &mdash; like a tape
+  measure that occasionally reads less than zero: right on average, maddening in practice. Because
+  \(e^{s} - s - 1 \ge 0\) for every \(s\), \(k_3\) reads \(\ge 0\) every time and carries lower
+  variance. In the <a href="grpo-from-scratch.html">code</a> it is a single line:</p>
   <pre><code>kl = torch.exp(ref_logprob - cur_logprob) - (ref_logprob - cur_logprob) - 1</code></pre>
 
   <p>The penalty can be applied two ways: subtracted from the reward before computing advantages
@@ -401,6 +484,11 @@
   failure is acute: if every completion in a group becomes identical, the rewards are identical, the
   advantage is \(0\), and <em>the gradient vanishes</em>. The learning signal literally dies.</p>
 
+  <div class="analogy"><span class="alabel">Analogy.</span> Exploration versus exploitation is the
+  diner's dilemma: always order your usual favorite (exploit) and you'll eat well tonight but never
+  discover the better dish two doors down (explore). A policy that always emits its current best guess
+  never samples the alternatives it would need in order to find a better one.</div>
+
   <p>The counter-pressure is an <strong>entropy bonus</strong>. The entropy of the next-token
   distribution measures how spread-out (exploratory) the policy is:</p>
 
@@ -408,10 +496,12 @@
   \[ \mathcal{H}\big(\pi_\theta(\cdot \mid s)\big) \;=\; -\sum_{a} \pi_\theta(a \mid s)\,\log \pi_\theta(a \mid s). \]
   </div>
 
-  <p>Adding \(+\,\alpha\,\mathcal{H}\) to the objective rewards keeping options open. In practice
-  \(\alpha\) is <strong>annealed</strong> from high to low &mdash; broad exploration early, sharp
-  exploitation late &mdash; and the rollout <strong>temperature</strong> provides a second,
-  sampling-time exploration knob.</p>
+  <p>Adding \(+\,\alpha\,\mathcal{H}\) to the objective rewards keeping options open &mdash; it fights
+  premature consensus, the failure where every sample becomes the same confident guess, like a
+  committee in which everyone always agrees and no new idea is ever raised. In practice \(\alpha\) is
+  <strong>annealed</strong> from high to low &mdash; broad exploration early, sharp exploitation late
+  &mdash; and the rollout <strong>temperature</strong> provides a second, sampling-time exploration
+  knob.</p>
 
   <div class="idea"><strong>The connection to &sect;5.</strong> Entropy collapse is visible directly in
   GRPO's group statistics: the fraction of zero-variance groups climbs toward \(1\). Because GRPO's
@@ -441,6 +531,12 @@
     <li>\(\beta\,\hat{D}_{\mathrm{KL}}^{k_3}\) &mdash; the <strong>leash</strong> to the reference (&sect;6).</li>
     <li>\(\alpha\,\mathcal{H}\) &mdash; the <strong>exploration</strong> pressure (&sect;7).</li>
   </ul>
+
+  <div class="idea"><strong>In plain English.</strong> The objective says: <em>push up the tokens of
+  better-than-average completions and push down the worse ones (the advantage), but don't move any
+  token too far in one step (the clip), don't drift too far from the trusted reference model (the KL),
+  and keep enough randomness to stay curious (the entropy).</em></div>
+
   <p>Optimizers minimize, so an implementation descends \(-\mathcal{J}_{\text{GRPO}}\). The two inner
   averages &mdash; over tokens \(\tfrac{1}{|o_i|}\) and over the group \(\tfrac{1}{G}\) &mdash; are not
   innocent: how you aggregate the per-token loss is itself a design choice with real consequences for
@@ -452,15 +548,17 @@
 
   <h3>Inner policy updates (\(\mu\))</h3>
   <p>Importance sampling (&sect;2) lets you take \(\mu\) gradient epochs on each rollout batch instead of
-  one. But every inner step pushes \(\pi_\theta\) further from the \(\pi_{\theta_{\text{old}}}\) that
-  generated the batch, so the ratios drift, clipping fires more, and the estimate degrades. Keep
+  one &mdash; squeezing several lessons out of a single practice exam. But the more you reuse it, the
+  staler it gets: every inner step pushes \(\pi_\theta\) further from the \(\pi_{\theta_{\text{old}}}\)
+  that generated the batch, so the ratios drift, clipping fires more, and the estimate degrades. Keep
   \(\mu\) small (often \(1\)&ndash;\(4\)) and watch the approximate KL between the current and rollout
   policy; if it grows across epochs, the rollouts are too stale.</p>
 
   <h3>Group size and batch size</h3>
   <p>Larger \(G\) gives a lower-variance baseline and advantage (&sect;5) and broader exploration per
-  prompt, at linear rollout cost; \(8\)&ndash;\(16\) is typical. More prompts per step steadies the
-  gradient across tasks. The two together set the effective batch \(= \text{prompts} \times G\).</p>
+  prompt, at linear rollout cost; \(8\)&ndash;\(16\) is typical. Like a poll, a bigger sample yields a
+  more trustworthy average to grade against. More prompts per step steadies the gradient across tasks;
+  the two together set the effective batch \(= \text{prompts} \times G\).</p>
 
   <h3>Advantage normalization &amp; loss aggregation</h3>
   <p>Whether to divide by the group std (&sect;5) is the original-GRPO-vs-Dr.-GRPO choice; drop it if
@@ -486,20 +584,23 @@
 
   <h3>Dynamic sampling</h3>
   <p>Groups that come out all-correct or all-wrong have zero advantage and contribute no gradient
-  (&sect;7). <em>Dynamic sampling</em> (from DAPO) discards such groups and resamples, so every batch
-  carries signal &mdash; a direct remedy for the zero-variance-group failure that wastes compute as the
-  policy converges.</p>
+  (&sect;7) &mdash; the way a problem the whole class either aced or flunked separates no one.
+  <em>Dynamic sampling</em> (from DAPO) discards such groups and resamples ones that discriminate, so
+  every batch carries signal &mdash; a direct remedy for the zero-variance-group failure that wastes
+  compute as the policy converges.</p>
 
   <div class="note"><strong>Above all, read the rollouts.</strong> Reward hacking, format collapse, and
-  repetition are often invisible in the loss curve but obvious in ten sampled completions. Trust an
-  <em>independent</em> evaluation over the training reward, which the policy is actively trying to
-  game.</div>
+  repetition are often invisible in the loss curve but obvious in ten sampled completions &mdash; taste
+  the dish, don't just trust the thermometer. Trust an <em>independent</em> evaluation over the
+  training reward, which the policy is actively trying to game.</div>
 
   <hr>
   <p>That is the full chain: start from expected reward, make it estimable with policy gradients, make
   it sample-efficient with importance sampling, make it safe with a trust region, make it low-variance
   with a group-relative baseline, and keep it honest with KL and entropy. GRPO is not a single trick so
-  much as this stack of fixes with the critic removed. To see the whole thing as code, read the
+  much as this stack of fixes with the critic removed &mdash; each link a guardrail bolted onto one
+  simple instinct, <em>reward what works</em>, so that it survives contact with a real model. To see
+  the whole thing as code, read the
   <a href="grpo-from-scratch.html">from-scratch walkthrough</a>; to operate it, keep the
   <a href="grpo.html">metrics-and-knobs reference</a> open during runs.</p>
 
