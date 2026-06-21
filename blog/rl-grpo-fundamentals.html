@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RL &amp; GRPO Fundamentals</title>
+<meta name="description" content="The math behind training language models with reinforcement learning: policy gradients, importance sampling, the surrogate objective, trust regions and clipping, advantages and the critic, PPO vs. GRPO, KL and entropy regularization, and the full GRPO objective.">
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]']],
+      tags: 'none'
+    },
+    options: { skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'] }
+  };
+</script>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
+    --code-fg: #b3266b; --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
+    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --table-head: #f3f5f7; --maxw: 880px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+      --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
+      --code-fg: #ff7bbf; --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
+      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff; --table-head: #161b22;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+          Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  h1, h2, h3 { line-height: 1.25; font-weight: 650; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 1.5rem; margin: 2.6em 0 0.3em; padding-bottom: .28em;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  h2 .num {
+    display: inline-block; min-width: 1.7em; margin-right: .5em; padding: 0 .45em;
+    font-size: .8em; font-weight: 700; text-align: center; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 7px;
+    vertical-align: middle;
+  }
+  h3 { font-size: 1.12rem; margin: 1.8em 0 0.3em; }
+  p { margin: 0.85em 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { font-weight: 650; }
+  em { color: var(--fg); }
+  code {
+    background: var(--code-bg); color: var(--code-fg);
+    padding: .12em .38em; border-radius: 5px; font-size: .86em;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--border-soft);
+    border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 1.1em 0 1.4em;
+    font-size: .86rem; line-height: 1.55;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  pre code { background: none; color: var(--fg); padding: 0; font-size: inherit; }
+  hr { border: none; border-top: 1px solid var(--border-soft); margin: 2.6em 0; }
+
+  /* back link + title block */
+  .backlink { display: inline-block; margin: 0 0 1.6em; color: var(--muted);
+    font-size: .92rem; font-weight: 500; }
+  .backlink:hover { color: var(--accent); text-decoration: none; }
+  .doc-title { font-size: 2.4rem; line-height: 1.15; margin: 0 0 .15em; font-weight: 700;
+    letter-spacing: -0.02em; }
+  .doc-sub { color: var(--muted); font-size: 1.18rem; margin: 0 0 1.1em; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.8em;
+    display: flex; gap: .6em; flex-wrap: wrap; align-items: center; }
+  .meta .dot { opacity: .5; }
+  .tag { font-size: .76rem; font-weight: 600; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd);
+    border-radius: 999px; padding: .12em .7em; }
+  .lead { font-size: 1.06rem; }
+
+  /* table of contents */
+  .toc { background: var(--row-alt); border: 1px solid var(--border-soft);
+    border-radius: 12px; padding: 16px 22px 18px; margin: 2em 0; }
+  .toctitle { font-weight: 700; font-size: .82rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 .6em; }
+  .toc ol { margin: 0; padding-left: 1.4em; columns: 2; column-gap: 2.4em; }
+  .toc li { margin: .32em 0; padding-left: .2em; }
+  @media (max-width: 620px) { .toc ol { columns: 1; } }
+
+  /* roadmap ordered steps */
+  .steps { counter-reset: step; list-style: none; padding: 0; margin: 1.2em 0; }
+  .steps li { position: relative; padding: .55em 0 .55em 3em; margin: 0;
+    border-bottom: 1px solid var(--border-soft); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: .55em; width: 2em; height: 2em;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .85em; font-weight: 700; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 50%;
+  }
+
+  /* callouts */
+  .note, .idea { border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .97rem; }
+  .note { background: var(--note-bg); border: 1px solid var(--note-bd); }
+  .idea { background: var(--num-bg); border: 1px solid var(--num-bd); border-left: 3px solid var(--accent); }
+  .note strong, .idea strong { font-weight: 700; }
+
+  /* key equation box */
+  .keyeq { background: var(--row-alt); border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--accent); border-radius: 8px;
+    padding: .2em 1.1em; margin: 1.3em 0; overflow-x: auto; }
+
+  /* MathJax display blocks scroll on small screens */
+  mjx-container[display="true"] { overflow-x: auto; overflow-y: hidden; max-width: 100%;
+    padding: 3px 0; }
+
+  /* tables */
+  .tablewrap { overflow-x: auto; margin: 1.2em 0 1.6em;
+    border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; min-width: 560px; }
+  thead th { background: var(--table-head); text-align: left; font-weight: 650;
+    padding: 11px 14px; border-bottom: 2px solid var(--border); }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border-soft);
+    vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody td:first-child { font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .footer { margin-top: 3.4em; padding-top: 1.4em; border-top: 1px solid var(--border-soft);
+    color: var(--muted); font-size: .9rem; }
+  @media (max-width: 640px) {
+    .wrap { padding: 28px 16px 64px; }
+    .doc-title { font-size: 1.85rem; } .doc-sub { font-size: 1.05rem; }
+    h2 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="../index.html#blog" class="backlink">&larr; Back to all posts</a>
+
+  <h1 class="doc-title">RL &amp; GRPO Fundamentals</h1>
+  <p class="doc-sub">From policy gradients and trust regions to group-relative advantages &mdash; the math behind training language models with reinforcement learning.</p>
+  <div class="meta">
+    <span class="tag">RL</span><span class="tag">GRPO</span><span class="tag">PPO</span><span class="tag">Theory</span>
+    <span class="dot">&middot;</span><span>June 2026</span>
+    <span class="dot">&middot;</span><span>~18 min read</span>
+  </div>
+
+  <p class="lead">Reinforcement learning gives a language model something supervised fine-tuning cannot:
+  the ability to learn from a <em>score</em> on its own generated output, rather than from gold
+  reference tokens. <strong>GRPO</strong> (Group Relative Policy Optimization) is the algorithm
+  behind DeepSeek-R1 and much of today's reasoning-model wave, and it is best understood as the
+  endpoint of a short chain of ideas &mdash; policy gradients, importance sampling, trust regions,
+  and baselines &mdash; where each link fixes a flaw in the one before it.</p>
+
+  <p>This post builds that chain from the ground up, with the formulas, and ends at the full GRPO
+  objective and the practices that keep it stable. It is the conceptual companion to two hands-on
+  posts: the <a href="grpo-from-scratch.html">from-scratch code walkthrough</a> (the same ideas in
+  runnable PyTorch) and the <a href="grpo.html">practical reference</a> (every metric and knob).</p>
+
+  <div class="toc">
+    <div class="toctitle">Contents</div>
+    <ol>
+      <li><a href="#objective">The RL objective for LLMs</a></li>
+      <li><a href="#surrogate">Importance sampling &amp; the surrogate</a></li>
+      <li><a href="#trust">Trust region &amp; clipping</a></li>
+      <li><a href="#advantage">Reward, value &amp; advantage</a></li>
+      <li><a href="#ppo-grpo">PPO vs. GRPO: dropping the critic</a></li>
+      <li><a href="#kl">Regularization I: KL to a reference</a></li>
+      <li><a href="#entropy">Regularization II: entropy &amp; exploration</a></li>
+      <li><a href="#objective-full">The complete GRPO objective</a></li>
+      <li><a href="#practices">Training best practices</a></li>
+    </ol>
+  </div>
+
+  <hr>
+
+  <h2 id="objective"><span class="num">1</span>The RL objective for LLMs</h2>
+  <p>Cast text generation as a sequential decision problem. A <strong>policy</strong>
+  \(\pi_\theta\) (the model, with parameters \(\theta\)) reads a prompt \(q\) and samples a
+  completion \(o = (o_1, o_2, \dots, o_{|o|})\) one token at a time, each token conditioned on the
+  prompt and everything generated so far. A <strong>reward</strong> \(R(q, o)\) scores the finished
+  completion &mdash; a verifier returning \(1\) for a correct answer, a learned reward model, or some
+  shaped score. The goal of RL is to maximize the expected reward:</p>
+
+  <div class="keyeq">
+  \[ J(\theta) \;=\; \mathbb{E}_{\,q \sim \mathcal{D},\; o \sim \pi_\theta(\cdot \mid q)}\big[\,R(q, o)\,\big]. \]
+  </div>
+
+  <p>We cannot backpropagate through the sampling step directly. The <strong>policy gradient
+  theorem</strong> (the log-derivative trick) rewrites the gradient of the objective as an
+  expectation we <em>can</em> estimate from samples:</p>
+
+  <div class="keyeq">
+  \[ \nabla_\theta J(\theta) \;=\; \mathbb{E}_{\,o \sim \pi_\theta}\big[\,R(q,o)\,\nabla_\theta \log \pi_\theta(o \mid q)\,\big]. \]
+  </div>
+
+  <p>The intuition is simple: nudge \(\theta\) to raise the log-probability of completions that earned
+  high reward and lower it for the rest. This estimator &mdash; <strong>REINFORCE</strong> &mdash; is
+  unbiased but almost unusable in practice for two reasons:</p>
+  <ul>
+    <li><strong>Crushing variance.</strong> A single scalar \(R\) multiplies the gradient of an entire
+    sequence, with no sense of <em>which</em> tokens deserved credit.</li>
+    <li><strong>It is on-policy.</strong> The expectation is over \(\pi_\theta\), so every gradient step
+    in principle needs freshly sampled completions &mdash; sampling from an LLM is the expensive part.</li>
+  </ul>
+
+  <p>Everything that follows is a sequence of fixes to these two problems. That sequence <em>is</em>
+  GRPO:</p>
+  <ol class="steps">
+    <li><strong>Reuse samples</strong> across several updates via importance sampling &rarr; the <em>surrogate objective</em> (&sect;2).</li>
+    <li><strong>Bound each update</strong> so the reused samples stay valid &rarr; <em>trust region &amp; clipping</em> (&sect;3).</li>
+    <li><strong>Cut variance</strong> by subtracting a baseline &rarr; <em>advantages</em>, with or without a critic (&sect;4&ndash;5).</li>
+    <li><strong>Anchor the policy</strong> so it doesn't drift or hack the reward &rarr; a <em>KL penalty</em> (&sect;6).</li>
+    <li><strong>Keep it exploring</strong> so the signal doesn't die &rarr; an <em>entropy bonus</em> (&sect;7).</li>
+  </ol>
+
+  <h2 id="surrogate"><span class="num">2</span>Importance sampling &amp; the surrogate</h2>
+  <p>To reuse a batch of completions for more than one gradient step, we need to evaluate the current
+  policy \(\pi_\theta\) using samples drawn from the <em>older</em> policy \(\pi_{\theta_{\text{old}}}\)
+  that actually generated them. <strong>Importance sampling</strong> is the change-of-measure identity
+  that makes this exact:</p>
+
+  <div class="keyeq">
+  \[ \mathbb{E}_{x \sim p}\big[f(x)\big] \;=\; \mathbb{E}_{x \sim \pi_{\theta_{\text{old}}}}\!\left[\frac{p(x)}{\pi_{\theta_{\text{old}}}(x)}\,f(x)\right]. \]
+  </div>
+
+  <p>Applied to the policy gradient, the correction factor is the <strong>importance sampling
+  ratio</strong> &mdash; the per-token probability the new policy assigns to the token actually
+  sampled, divided by the old policy's:</p>
+
+  <div class="keyeq">
+  \[ \rho_t(\theta) \;=\; \frac{\pi_\theta(o_t \mid q, o_{&lt;t})}{\pi_{\theta_{\text{old}}}(o_t \mid q, o_{&lt;t})}. \]
+  </div>
+
+  <p>Weighting each sample by its ratio gives the <strong>surrogate objective</strong> &mdash; an
+  off-policy estimate of expected reward, expressed with the advantage \(\hat{A}_t\) (the
+  variance-reduced stand-in for \(R\) that we build in &sect;4):</p>
+
+  <div class="keyeq">
+  \[ L^{\text{IS}}(\theta) \;=\; \mathbb{E}_{t}\big[\,\rho_t(\theta)\,\hat{A}_t\,\big]. \]
+  </div>
+
+  <p>This object has a crucial property: at \(\theta = \theta_{\text{old}}\) every ratio equals
+  \(1\), and its gradient is exactly the policy gradient. So optimizing the surrogate for a few steps
+  approximates true policy-gradient ascent &mdash; while letting us take several gradient steps on one
+  batch of rollouts (the <em>inner epochs</em> of &sect;9).</p>
+
+  <div class="note"><strong>The catch.</strong> Importance sampling is only trustworthy while
+  \(\pi_\theta\) stays close to \(\pi_{\theta_{\text{old}}}\). As they diverge, ratios can explode,
+  the estimator's variance blows up, and a single outlier token can dominate the update. We need to
+  keep the step small &mdash; which is precisely the job of the trust region.</div>
+
+  <h2 id="trust"><span class="num">3</span>Trust region &amp; clipping</h2>
+  <p>The principled fix is <strong>TRPO</strong>: maximize the surrogate subject to a hard limit on how
+  far the policy may move, measured in KL divergence:</p>
+
+  <div class="keyeq">
+  \[ \max_{\theta}\; \mathbb{E}_t\big[\rho_t(\theta)\,\hat{A}_t\big] \quad \text{subject to}\quad \mathbb{E}\big[D_{\mathrm{KL}}(\pi_{\theta_{\text{old}}} \,\|\, \pi_\theta)\big] \le \delta. \]
+  </div>
+
+  <p>This trust-region constraint works, but enforcing it requires second-order machinery (conjugate
+  gradients, the Fisher matrix) that is awkward at LLM scale. <strong>PPO</strong> replaces the hard
+  constraint with a cheap, first-order surrogate that simply <strong>clips</strong> the ratio into the
+  band \([1-\epsilon,\, 1+\epsilon]\):</p>
+
+  <div class="keyeq">
+  \[ L^{\text{CLIP}}(\theta) \;=\; \mathbb{E}_t\Big[\min\big(\rho_t\,\hat{A}_t,\; \operatorname{clip}(\rho_t,\, 1-\epsilon,\, 1+\epsilon)\,\hat{A}_t\big)\Big]. \]
+  </div>
+
+  <p>Read the two cases through the \(\min\):</p>
+  <ul>
+    <li>When \(\hat{A}_t \gt 0\) (a better-than-average token), the gain is capped once
+    \(\rho_t \ge 1+\epsilon\): no reward for pushing the probability arbitrarily high in one step.</li>
+    <li>When \(\hat{A}_t \lt 0\) (worse-than-average), the term is capped once
+    \(\rho_t \le 1-\epsilon\): no runaway suppression.</li>
+  </ul>
+  <p>The \(\min\) makes \(L^{\text{CLIP}}\) a <em>pessimistic lower bound</em> on the unclipped
+  surrogate, removing any incentive to move \(\rho_t\) outside the band. The result keeps each update
+  inside an implicit trust region with nothing but an element-wise clamp.</p>
+
+  <div class="idea"><strong>Two different leashes.</strong> Clipping bounds how far the policy moves
+  <em>per update</em> from \(\pi_{\theta_{\text{old}}}\) (which is refreshed every rollout). The KL
+  penalty in &sect;6 bounds how far it drifts from a <em>fixed</em> reference. They are complementary,
+  and modern GRPO typically uses both.</div>
+
+  <h2 id="advantage"><span class="num">4</span>Reward, value &amp; advantage</h2>
+  <p>We have been writing \(\hat{A}_t\) as a stand-in for the raw reward. Why not just use \(R\)? Because
+  subtracting a well-chosen <strong>baseline</strong> dramatically cuts variance without adding bias.
+  To see what baseline to use, define the standard RL quantities. The <strong>return</strong> from a
+  state is the (discounted) reward-to-go, and two value functions summarize it:</p>
+
+  <div class="keyeq">
+  \[ V^\pi(s) = \mathbb{E}_\pi\big[\,G_t \mid s_t = s\,\big], \qquad Q^\pi(s,a) = \mathbb{E}_\pi\big[\,G_t \mid s_t = s,\, a_t = a\,\big]. \]
+  </div>
+
+  <p>\(V^\pi(s)\) is the expected reward from state \(s\) under the policy; \(Q^\pi(s,a)\) is the
+  expected reward if we take action \(a\) first. Their difference is the <strong>advantage</strong>:</p>
+
+  <div class="keyeq">
+  \[ A^\pi(s,a) \;=\; Q^\pi(s,a) - V^\pi(s). \]
+  </div>
+
+  <p>The advantage answers exactly the right question &mdash; &ldquo;how much better than average is
+  this action here?&rdquo; Using \(V^\pi(s)\) as the baseline is what makes the policy gradient
+  low-variance yet still unbiased (the baseline depends only on the state, so it cancels in
+  expectation). In PPO the advantage is estimated with <strong>GAE</strong> from a learned value
+  network (the <strong>critic</strong>) \(V_\phi\):</p>
+
+  <div class="keyeq">
+  \[ \delta_t = r_t + \gamma V_\phi(s_{t+1}) - V_\phi(s_t), \qquad \hat{A}_t^{\text{GAE}} = \sum_{l \ge 0} (\gamma\lambda)^l\,\delta_{t+l}. \]
+  </div>
+
+  <p>The critic is a second network, usually about the size of the policy, trained by regression to
+  predict returns. It is the engine of PPO's variance reduction &mdash; and, as we are about to see,
+  its cost is exactly what GRPO removes.</p>
+
+  <h2 id="ppo-grpo"><span class="num">5</span>PPO vs. GRPO: dropping the critic</h2>
+  <p>For LLMs the critic is painful: it doubles the trainable footprint, and learning an accurate
+  per-token value head is hard when the reward is a single number arriving only at the end of a long
+  completion. A wrong critic biases every advantage.</p>
+
+  <p>GRPO's insight is to estimate the baseline from <strong>samples instead of a model</strong>. For
+  each prompt \(q\), sample a <strong>group</strong> of \(G\) completions
+  \(\{o_1, \dots, o_G\}\) from the current policy and score them, \(r_i = R(q, o_i)\). The group's
+  mean reward is a Monte-Carlo estimate of \(V(q)\), so subtracting it gives a model-free advantage.
+  Each completion's advantage is its standardized reward within the group, and it is broadcast to
+  every token of that completion:</p>
+
+  <div class="keyeq">
+  \[ \hat{A}_{i,t} \;=\; \frac{r_i - \operatorname{mean}(r_1, \dots, r_G)}{\operatorname{std}(r_1, \dots, r_G)} \qquad \text{for all tokens } t \text{ in } o_i. \]
+  </div>
+
+  <p>That is the whole trick. The group mean plays the role of \(V^\pi\); the comparison across
+  siblings supplies the credit signal that PPO gets from its critic. Crucially, GRPO then plugs this
+  \(\hat{A}_{i,t}\) into the <em>same</em> clipped surrogate from &sect;3 &mdash; ratio, clip,
+  pessimistic \(\min\), all identical. <strong>Only the advantage estimator changed.</strong></p>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Aspect</th><th>PPO</th><th>GRPO</th></tr></thead>
+    <tbody>
+      <tr><td>Baseline</td><td>Learned critic \(V_\phi(s)\)</td><td>Group mean reward</td></tr>
+      <tr><td>Advantage</td><td>GAE from the critic</td><td>\((r_i-\mathrm{mean})/\mathrm{std}\) within group</td></tr>
+      <tr><td>Extra network</td><td>Yes (critic, ~policy size)</td><td>None</td></tr>
+      <tr><td>Memory / compute</td><td>Higher</td><td>Lower (more rollouts instead)</td></tr>
+      <tr><td>Credit assignment</td><td>Per-step, temporal</td><td>Per-completion, group-relative</td></tr>
+      <tr><td>Best fit</td><td>Dense, per-step rewards</td><td>Sparse / outcome / verifiable rewards</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="note"><strong>Variant: Dr. GRPO.</strong> Dividing by the group std can introduce a
+  difficulty bias &mdash; easy prompts whose rewards barely vary get a tiny denominator that
+  amplifies noise. A common fix is to drop the normalization and use
+  \(\hat{A}_i = r_i - \operatorname{mean}(r)\), trading the auto-scaling for a steadier signal.</div>
+
+  <h2 id="kl"><span class="num">6</span>Regularization I: KL to a reference</h2>
+  <p>The reward is only a <em>proxy</em> for what we actually want. Maximize it without restraint and
+  the policy drifts into degenerate text, forgets general capability, or discovers exploits that score
+  well without being good (<em>reward hacking</em>). The guard is a <strong>KL penalty</strong> that
+  anchors the policy to a frozen <strong>reference</strong> \(\pi_{\text{ref}}\) (typically the SFT or
+  initial model):</p>
+
+  <div class="keyeq">
+  \[ D_{\mathrm{KL}}(\pi_\theta \,\|\, \pi_{\text{ref}}) \;=\; \mathbb{E}_{x \sim \pi_\theta}\!\left[\log \frac{\pi_\theta(x)}{\pi_{\text{ref}}(x)}\right]. \]
+  </div>
+
+  <p>We never have full distributions over sequences &mdash; only the tokens we sampled &mdash; so KL
+  must be <em>estimated</em> per token. Writing the log-ratio \(s = \log\frac{\pi_{\text{ref}}(x)}{\pi_\theta(x)}\)
+  for a sampled token \(x \sim \pi_\theta\), two estimators are common:</p>
+
+  <div class="keyeq">
+  \[ \underbrace{\hat{D}_{\text{KL}}^{k_1} = -\,s}_{\text{unbiased, high variance, can be negative}} \qquad\qquad \underbrace{\hat{D}_{\text{KL}}^{k_3} = e^{s} - s - 1}_{\text{unbiased, always } \ge 0,\ \text{low variance}}. \]
+  </div>
+
+  <p>The <strong>k3 estimator</strong> is the modern default: because \(e^{s} - s - 1 \ge 0\) for all
+  \(s\), it never produces the negative per-token &ldquo;KL&rdquo; values that destabilize training,
+  and it has lower variance than the naive log-ratio. In the
+  <a href="grpo-from-scratch.html">code</a> it is a single line:</p>
+  <pre><code>kl = torch.exp(ref_logprob - cur_logprob) - (ref_logprob - cur_logprob) - 1</code></pre>
+
+  <p>The penalty can be applied two ways: subtracted from the reward before computing advantages
+  (classic RLHF), or added as a separate loss term weighted by \(\beta\) (common in modern GRPO). The
+  latter keeps the advantage interpretation clean and is what the full objective in &sect;8 uses.</p>
+
+  <h2 id="entropy"><span class="num">7</span>Regularization II: entropy &amp; exploration</h2>
+  <p>A policy can only learn from completions it actually samples. This is the
+  <strong>exploration&ndash;exploitation</strong> tension: exploit too early &mdash; collapse onto a
+  single confident answer per prompt &mdash; and you stop discovering anything better. For GRPO the
+  failure is acute: if every completion in a group becomes identical, the rewards are identical, the
+  advantage is \(0\), and <em>the gradient vanishes</em>. The learning signal literally dies.</p>
+
+  <p>The counter-pressure is an <strong>entropy bonus</strong>. The entropy of the next-token
+  distribution measures how spread-out (exploratory) the policy is:</p>
+
+  <div class="keyeq">
+  \[ \mathcal{H}\big(\pi_\theta(\cdot \mid s)\big) \;=\; -\sum_{a} \pi_\theta(a \mid s)\,\log \pi_\theta(a \mid s). \]
+  </div>
+
+  <p>Adding \(+\,\alpha\,\mathcal{H}\) to the objective rewards keeping options open. In practice
+  \(\alpha\) is <strong>annealed</strong> from high to low &mdash; broad exploration early, sharp
+  exploitation late &mdash; and the rollout <strong>temperature</strong> provides a second,
+  sampling-time exploration knob.</p>
+
+  <div class="idea"><strong>The connection to &sect;5.</strong> Entropy collapse is visible directly in
+  GRPO's group statistics: the fraction of zero-variance groups climbs toward \(1\). Because GRPO's
+  entire signal is the reward <em>variance within a group</em>, protecting exploration is not a nicety
+  here &mdash; it is what keeps the advantage non-zero.</div>
+
+  <h2 id="objective-full"><span class="num">8</span>The complete GRPO objective</h2>
+  <p>Every piece now assembles into one expression. Sample \(G\) completions per prompt; for each token
+  form the ratio \(\rho_{i,t}\) (&sect;2), weight the group-relative advantage \(\hat{A}_{i,t}\)
+  (&sect;5) through the clipped surrogate (&sect;3), subtract the \(k_3\) KL leash to the reference
+  (&sect;6), and &mdash; optionally &mdash; add the entropy bonus (&sect;7):</p>
+
+  <div class="keyeq">
+  \[
+  \begin{aligned}
+  \mathcal{J}_{\text{GRPO}}(\theta) = \mathbb{E}\Big[ \frac{1}{G}\sum_{i=1}^{G} \frac{1}{|o_i|} \sum_{t=1}^{|o_i|} \Big( &amp;\min\big(\rho_{i,t}\hat{A}_{i,t},\; \operatorname{clip}(\rho_{i,t}, 1-\epsilon, 1+\epsilon)\,\hat{A}_{i,t}\big) \\
+  &amp;\;-\; \beta\, \hat{D}_{\mathrm{KL}}^{k_3}\!\big(\pi_\theta \,\|\, \pi_{\text{ref}}\big) \Big) \;+\; \alpha\,\mathcal{H}(\pi_\theta) \Big]
+  \end{aligned}
+  \]
+  </div>
+
+  <p>Reading it term by term is a tour of this whole post:</p>
+  <ul>
+    <li>\(\rho_{i,t}\) &mdash; the <strong>importance ratio</strong> that lets us reuse rollouts (&sect;2).</li>
+    <li>\(\operatorname{clip}(\cdot)\) and the \(\min\) &mdash; the <strong>trust region</strong> bounding each update (&sect;3).</li>
+    <li>\(\hat{A}_{i,t}\) &mdash; the <strong>group-relative advantage</strong>, GRPO's critic-free baseline (&sect;5).</li>
+    <li>\(\beta\,\hat{D}_{\mathrm{KL}}^{k_3}\) &mdash; the <strong>leash</strong> to the reference (&sect;6).</li>
+    <li>\(\alpha\,\mathcal{H}\) &mdash; the <strong>exploration</strong> pressure (&sect;7).</li>
+  </ul>
+  <p>Optimizers minimize, so an implementation descends \(-\mathcal{J}_{\text{GRPO}}\). The two inner
+  averages &mdash; over tokens \(\tfrac{1}{|o_i|}\) and over the group \(\tfrac{1}{G}\) &mdash; are not
+  innocent: how you aggregate the per-token loss is itself a design choice with real consequences for
+  length bias, which brings us to practice.</p>
+
+  <h2 id="practices"><span class="num">9</span>Training best practices</h2>
+  <p>The objective tells you <em>what</em> to optimize; these choices decide whether it trains. Each one
+  traces back to a tension already on the table.</p>
+
+  <h3>Inner policy updates (\(\mu\))</h3>
+  <p>Importance sampling (&sect;2) lets you take \(\mu\) gradient epochs on each rollout batch instead of
+  one. But every inner step pushes \(\pi_\theta\) further from the \(\pi_{\theta_{\text{old}}}\) that
+  generated the batch, so the ratios drift, clipping fires more, and the estimate degrades. Keep
+  \(\mu\) small (often \(1\)&ndash;\(4\)) and watch the approximate KL between the current and rollout
+  policy; if it grows across epochs, the rollouts are too stale.</p>
+
+  <h3>Group size and batch size</h3>
+  <p>Larger \(G\) gives a lower-variance baseline and advantage (&sect;5) and broader exploration per
+  prompt, at linear rollout cost; \(8\)&ndash;\(16\) is typical. More prompts per step steadies the
+  gradient across tasks. The two together set the effective batch \(= \text{prompts} \times G\).</p>
+
+  <h3>Advantage normalization &amp; loss aggregation</h3>
+  <p>Whether to divide by the group std (&sect;5) is the original-GRPO-vs-Dr.-GRPO choice; drop it if
+  training thrashes on easy prompts. Independently, averaging the per-token loss <em>per sequence</em>
+  versus <em>per token</em> changes how long completions are weighted &mdash; the lever for fixing
+  length-bias reward hacking, where the policy learns that longer outputs score higher by artifact.</p>
+
+  <h3>The KL and entropy coefficients</h3>
+  <p>\(\beta\) sets the strength of the reference leash (&sect;6): too high freezes learning, too low
+  invites drift and hacking; pair it with the \(k_3\) estimator. \(\alpha\) sets exploration pressure
+  (&sect;7) and is best annealed high&rarr;low. When training a strong SFT model these can be small;
+  from-scratch toy runs need much larger values.</p>
+
+  <h3>Reference synchronization</h3>
+  <p>Fine-tuning a capable model usually keeps \(\pi_{\text{ref}}\) fixed at the SFT checkpoint &mdash; a
+  trustworthy anchor. Training from scratch, anchoring to a random init fights learning, so the
+  reference is periodically re-synced to the current policy: a moving leash rather than a fixed one.</p>
+
+  <h3>Optimization stability</h3>
+  <p>Standard guards apply: a small learning rate with warmup and cosine decay, and global gradient-norm
+  clipping to absorb the occasional spike. These do not change the objective &mdash; they keep the
+  surrogate's first-order approximation valid step to step.</p>
+
+  <h3>Dynamic sampling</h3>
+  <p>Groups that come out all-correct or all-wrong have zero advantage and contribute no gradient
+  (&sect;7). <em>Dynamic sampling</em> (from DAPO) discards such groups and resamples, so every batch
+  carries signal &mdash; a direct remedy for the zero-variance-group failure that wastes compute as the
+  policy converges.</p>
+
+  <div class="note"><strong>Above all, read the rollouts.</strong> Reward hacking, format collapse, and
+  repetition are often invisible in the loss curve but obvious in ten sampled completions. Trust an
+  <em>independent</em> evaluation over the training reward, which the policy is actively trying to
+  game.</div>
+
+  <hr>
+  <p>That is the full chain: start from expected reward, make it estimable with policy gradients, make
+  it sample-efficient with importance sampling, make it safe with a trust region, make it low-variance
+  with a group-relative baseline, and keep it honest with KL and entropy. GRPO is not a single trick so
+  much as this stack of fixes with the critic removed. To see the whole thing as code, read the
+  <a href="grpo-from-scratch.html">from-scratch walkthrough</a>; to operate it, keep the
+  <a href="grpo.html">metrics-and-knobs reference</a> open during runs.</p>
+
+  <div class="footer">
+    RL &amp; GRPO fundamentals &middot; part of a three-post series on Group Relative Policy Optimization.
+  </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-chtml.min.js" id="MathJax-script" async></script>
+</body>
+</html>

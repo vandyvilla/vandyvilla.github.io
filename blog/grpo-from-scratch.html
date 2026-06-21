@@ -165,9 +165,9 @@
   the clipped surrogate, KL, and entropy &mdash; in a few hundred lines of PyTorch, and trains it on
   a deliberately tiny task: teach a small transformer to compute <code>a+b</code> for single digits.
   The task is trivial enough to train in minutes on a single GPU, yet it exercises every moving part
-  of a real GRPO run, and every failure mode shows up in the metrics. If you want the companion
-  debugging reference, see
-  <a href="grpo.html">A Practical GRPO Reference: Metrics to Watch and Configs to Tune</a>.</p>
+  of a real GRPO run, and every failure mode shows up in the metrics. For the theory behind the code,
+  see <a href="rl-grpo-fundamentals.html">RL &amp; GRPO Fundamentals</a>; for the debugging reference,
+  see <a href="grpo.html">A Practical GRPO Reference: Metrics to Watch and Configs to Tune</a>.</p>
 
   <h3>The GRPO loop at a glance</h3>
   <ol class="steps">
@@ -698,8 +698,9 @@ step 1200  reward +0.792  acc 0.80  fmt 0.82  kl 0.0001  ent 0.296</pre></div>
   entropy regularizers &mdash; the same machinery that trains frontier reasoning models, shrunk to
   something you can read in one sitting. To take it further, swap the toy reward for a real
   verifier and the TinyGPT policy for a pretrained model; the structure of the loop does not change.
-  For the metric-by-metric debugging guide and every configuration knob worth tuning, see the
-  <a href="grpo.html">companion GRPO reference</a>.</p>
+  For the math this code implements, see <a href="rl-grpo-fundamentals.html">RL &amp; GRPO
+  Fundamentals</a>; for the metric-by-metric debugging guide and every configuration knob worth
+  tuning, see the <a href="grpo.html">companion GRPO reference</a>.</p>
 
   <div class="footer">
     Code adapted and refined from a from-scratch GRPO notebook &middot; toy addition task (<code>a+b=?</code>).
