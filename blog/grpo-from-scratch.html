@@ -104,6 +104,14 @@
     background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 50%;
   }
 
+  /* grouped metric glossary */
+  .mgroup-label { font-weight: 700; font-size: .78rem; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--num-fg); margin: 1.5em 0 .2em; }
+  .mlist { list-style: none; padding-left: 0; margin: .1em 0 .6em; }
+  .mlist li { padding: .4em 0; border-bottom: 1px solid var(--border-soft); }
+  .mlist li:last-child { border-bottom: none; }
+  .mlist code { font-weight: 600; }
+
   /* callout note */
   .note { background: var(--note-bg); border: 1px solid var(--note-bd);
     border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .96rem; }
@@ -178,7 +186,7 @@
       <li><a href="#model">Tokenizer &amp; the TinyGPT policy</a></li>
       <li><a href="#init">Policy &amp; reference models</a></li>
       <li><a href="#reward">Reward &amp; data generation</a></li>
-      <li><a href="#optim">Optimizer &amp; metric logging</a></li>
+      <li><a href="#metrics">Metrics</a></li>
       <li><a href="#rollout">Rollout: sampling completions</a></li>
       <li><a href="#logprobs">Scoring tokens: log-probs &amp; entropy</a></li>
       <li><a href="#trainstep">The GRPO training step</a></li>
@@ -300,7 +308,8 @@ class TinyGPT(nn.Module):
   from sensible behavior. Both start from the same random initialization &mdash; the from-scratch
   setting &mdash; and rather than pinning the reference to a fixed SFT checkpoint, we periodically
   re-sync it to the policy (see <code>ref_sync_every</code> in the training step). Seeding everything
-  keeps the run reproducible.</p>
+  keeps the run reproducible. We also build the AdamW <strong>optimizer</strong> here, over the
+  policy's parameters only &mdash; the reference is frozen, so it never receives gradients.</p>
   <pre><code class="language-python">seed = 0
 torch.manual_seed(seed)
 random.seed(seed)
@@ -311,7 +320,10 @@ model = TinyGPT().to(device)
 ref_model = TinyGPT().to(device)
 ref_model.load_state_dict(model.state_dict())
 for p in ref_model.parameters():
-    p.requires_grad_(False)</code></pre>
+    p.requires_grad_(False)
+
+# Optimizer over the (trainable) policy parameters only.
+optimizer = torch.optim.AdamW(model.parameters(), lr=lr)</code></pre>
 
   <h2 id="reward"><span class="num">4</span>Reward &amp; data generation</h2>
   <p>RL replaces labels with a reward, and <code>compute_reward</code> is the entire supervision
@@ -359,14 +371,13 @@ def generate_dataset(prompts_per_step, group_size):
   format-rate and true accuracy separately from the shaped reward the policy actually optimizes.
   Tracking an independent correctness metric is how you catch reward hacking.</div>
 
-  <h2 id="optim"><span class="num">5</span>Optimizer &amp; metric logging</h2>
-  <p>AdamW, plus a dictionary of metric lists. The logging is not an afterthought: in RL the loss
-  value is nearly meaningless (it is an objective to ascend, not a quantity that monotonically
-  decreases), so you debug almost entirely from these curves &mdash; reward, accuracy, KL, entropy,
-  advantage spread, clip fraction, and response length.</p>
-  <pre><code class="language-python">optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-
-# Per-step metric history. Watching these curves is how you debug GRPO.
+  <h2 id="metrics"><span class="num">5</span>Metrics</h2>
+  <p>GRPO gives you almost no usable signal from the loss value alone (in RL the loss is something you
+  ascend, not a quantity that falls monotonically), so you debug from a <strong>dashboard of
+  metrics</strong> instead. The <code>history</code> dict below holds one list per metric; every step,
+  <code>train_step</code> (Section 8) appends a single value to each, and the nine plots in Section 10
+  are simply these lists drawn over time.</p>
+  <pre><code class="language-python"># Per-step metric history. Watching these curves is how you debug GRPO.
 history = {
     k: []
     for k in [
@@ -383,6 +394,43 @@ history = {
         &quot;resp_len&quot;,
     ]
 }</code></pre>
+  <p>The eleven signals fall into six families &mdash; the same grouping used in the logging block of
+  the training step. Brief definitions:</p>
+
+  <div class="mgroup-label">Reward &amp; task performance</div>
+  <ul class="mlist">
+    <li><code>reward</code> &mdash; mean shaped reward across every completion in the step; the headline objective the policy maximizes.</li>
+    <li><code>accuracy</code> &mdash; exact-match rate (pass@1), computed independently of the shaped reward so it can expose reward hacking.</li>
+    <li><code>format</code> &mdash; fraction of well-formed completions: a 1&ndash;2 digit number that terminated with EOS.</li>
+  </ul>
+
+  <div class="mgroup-label">Divergence &amp; exploration</div>
+  <ul class="mlist">
+    <li><code>kl</code> &mdash; KL(policy&nbsp;&#8214;&nbsp;reference) via the unbiased k3 estimator; how far the policy has drifted from the frozen anchor.</li>
+    <li><code>entropy</code> &mdash; mean next-token entropy of the policy; the exploration signal, expected to decay gradually rather than collapse.</li>
+  </ul>
+
+  <div class="mgroup-label">Advantage health</div>
+  <ul class="mlist">
+    <li><code>frac_zero_adv_groups</code> &mdash; fraction of groups whose completions all score alike (zero advantage, no gradient); trending toward 1 with low accuracy means the learning signal has died.</li>
+    <li><code>adv_std</code> &mdash; spread of the group-relative advantages, i.e. the effective gradient magnitude.</li>
+  </ul>
+
+  <div class="mgroup-label">Surrogate mechanics</div>
+  <ul class="mlist">
+    <li><code>clip_frac</code> &mdash; fraction of tokens whose importance ratio hit the <code>1 &plusmn; clip_eps</code> boundary and was clipped.</li>
+  </ul>
+
+  <div class="mgroup-label">Optimization</div>
+  <ul class="mlist">
+    <li><code>loss</code> &mdash; value of the full GRPO objective; noisy and not a headline metric (an RL loss is ascended, not minimized).</li>
+    <li><code>grad_norm</code> &mdash; raw gradient magnitude before clipping, logged to catch instability spikes.</li>
+  </ul>
+
+  <div class="mgroup-label">Output quality</div>
+  <ul class="mlist">
+    <li><code>resp_len</code> &mdash; mean completion length in tokens; a steady upward drift can signal length-bias reward hacking.</li>
+  </ul>
 
   <h2 id="rollout"><span class="num">6</span>Rollout: sampling completions</h2>
   <p>This is step 1 of the loop. <code>generate</code> samples completions autoregressively from the
