@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understanding GRPO &mdash; A Three-Part Series</title>
+<meta name="description" content="A three-part series on Group Relative Policy Optimization (GRPO): the RL math fundamentals, a from-scratch code walkthrough, and a practical reference of metrics and configs for real training runs.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
+    --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
+    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --an-bg: #ecf8f1; --an-bd: #bfe3d0; --an-fg: #15734c;
+    --maxw: 820px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+      --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
+      --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
+      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff;
+      --an-bg: #0e1f17; --an-bd: #285339; --an-fg: #56cf92;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+          Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  p { margin: 0.85em 0; }
+  strong { font-weight: 650; }
+  em { color: var(--fg); }
+  code { background: var(--code-bg); color: var(--accent);
+    padding: .12em .38em; border-radius: 5px; font-size: .86em;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+
+  .backlink { display: inline-block; margin: 0 0 1.6em; color: var(--muted);
+    font-size: .92rem; font-weight: 500; }
+  .backlink:hover { color: var(--accent); text-decoration: none; }
+  .doc-title { font-size: 2.4rem; line-height: 1.15; margin: 0 0 .15em; font-weight: 700;
+    letter-spacing: -0.02em; }
+  .doc-sub { color: var(--muted); font-size: 1.18rem; margin: 0 0 1.1em; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.8em;
+    display: flex; gap: .6em; flex-wrap: wrap; align-items: center; }
+  .meta .dot { opacity: .5; }
+  .tag { font-size: .76rem; font-weight: 600; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd);
+    border-radius: 999px; padding: .12em .7em; }
+  .lead { font-size: 1.06rem; }
+
+  /* series cards */
+  .series { display: grid; gap: 1.15em; margin: 2.2em 0 1.2em; }
+  .scard { display: block; position: relative; border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.3em 1.5em; background: var(--row-alt);
+    text-decoration: none; color: inherit;
+    transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+  .scard:hover { border-color: var(--accent); transform: translateY(-2px);
+    box-shadow: 0 6px 22px rgba(0,0,0,.08); text-decoration: none; }
+  .scard-head { display: flex; align-items: center; gap: .75em; margin-bottom: .55em;
+    flex-wrap: wrap; }
+  .scard-num { flex: none; width: 2em; height: 2em; border-radius: 50%; display: flex;
+    align-items: center; justify-content: center; font-weight: 700; font-size: .95rem;
+    color: var(--num-fg); background: var(--num-bg); border: 1px solid var(--num-bd); }
+  .scard-kind { font-size: .72rem; font-weight: 700; letter-spacing: .05em;
+    text-transform: uppercase; color: var(--an-fg); background: var(--an-bg);
+    border: 1px solid var(--an-bd); border-radius: 999px; padding: .18em .7em; }
+  .scard h3 { margin: 0; font-size: 1.22rem; font-weight: 650; line-height: 1.25; }
+  .scard p { margin: .5em 0 .8em; color: var(--muted); font-size: .98rem; }
+  .scard-meta { display: flex; align-items: center; justify-content: space-between;
+    font-size: .9rem; }
+  .scard-time { color: var(--muted); }
+  .scard-go { color: var(--accent); font-weight: 600; }
+
+  .note { background: var(--note-bg); border: 1px solid var(--note-bd);
+    border-radius: 10px; padding: .9em 1.2em; margin: 1.6em 0; font-size: .97rem; }
+  .note strong { font-weight: 700; }
+
+  .footer { margin-top: 3em; padding-top: 1.4em; border-top: 1px solid var(--border-soft);
+    color: var(--muted); font-size: .9rem; }
+  @media (max-width: 640px) {
+    .wrap { padding: 28px 16px 64px; }
+    .doc-title { font-size: 1.85rem; } .doc-sub { font-size: 1.05rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="../index.html#blog" class="backlink">&larr; Back to all posts</a>
+
+  <h1 class="doc-title">Understanding GRPO</h1>
+  <p class="doc-sub">A three-part series on Group Relative Policy Optimization &mdash; the math, a from-scratch implementation, and a field reference for real training runs.</p>
+  <div class="meta">
+    <span class="tag">GRPO</span><span class="tag">Reinforcement Learning</span><span class="tag">Series</span>
+    <span class="dot">&middot;</span><span>June 2026</span>
+    <span class="dot">&middot;</span><span>3 posts</span>
+  </div>
+
+  <p class="lead"><strong>GRPO</strong> (Group Relative Policy Optimization) is the reinforcement-learning
+  algorithm behind DeepSeek-R1 and much of today's reasoning-model wave: it drops PPO's value critic
+  and instead scores each sampled completion against the average of its group. These three posts cover
+  it from complementary angles &mdash; theory, code, and operations. They're written to be read in
+  order, but each stands on its own.</p>
+
+  <div class="series">
+
+    <a class="scard" href="rl-grpo-fundamentals.html">
+      <div class="scard-head">
+        <span class="scard-num">1</span>
+        <span class="scard-kind">Theory</span>
+      </div>
+      <h3>RL &amp; GRPO Fundamentals</h3>
+      <p>The math, built one idea at a time: policy gradients, importance sampling, the surrogate
+      objective, trust regions, advantages, PPO vs. GRPO, and KL/entropy regularization &mdash; with
+      every formula bridged to the actual implementation.</p>
+      <div class="scard-meta">
+        <span class="scard-time">~25 min read</span>
+        <span class="scard-go">Read &rarr;</span>
+      </div>
+    </a>
+
+    <a class="scard" href="grpo-from-scratch.html">
+      <div class="scard-head">
+        <span class="scard-num">2</span>
+        <span class="scard-kind">Code</span>
+      </div>
+      <h3>GRPO from Scratch: A Code Walkthrough</h3>
+      <p>A fully-coded, section-by-section build of GRPO &mdash; rollout, group-relative advantage, the
+      clipped surrogate, KL and entropy &mdash; trained from scratch on a toy <code>a+b</code> task,
+      ending with the live training metrics.</p>
+      <div class="scard-meta">
+        <span class="scard-time">~12 min read</span>
+        <span class="scard-go">Read &rarr;</span>
+      </div>
+    </a>
+
+    <a class="scard" href="grpo.html">
+      <div class="scard-head">
+        <span class="scard-num">3</span>
+        <span class="scard-kind">Reference</span>
+      </div>
+      <h3>A Practical GRPO Reference: Metrics to Watch and Configs to Tune</h3>
+      <p>The field reference to keep open during runs: every metric worth logging (with healthy and
+      abnormal shapes and fixes) and every configuration knob, with ranges and the symptom that tells
+      you to turn it.</p>
+      <div class="scard-meta">
+        <span class="scard-time">~15 min read</span>
+        <span class="scard-go">Read &rarr;</span>
+      </div>
+    </a>
+
+  </div>
+
+  <div class="note"><strong>How to read this series.</strong> New to GRPO? Start at the top and work
+  down &mdash; the theory motivates the code, and the code produces the very curves the reference
+  explains. Already training and just need to debug a run? Jump straight to the reference.</div>
+
+  <div class="footer">
+    Understanding GRPO &middot; a three-part series on Group Relative Policy Optimization.
+  </div>
+</div>
+</body>
+</html>
