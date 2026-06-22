@@ -206,6 +206,7 @@
       <li><a href="#loop">The training loop</a></li>
       <li><a href="#results">Results: reading the metrics</a></li>
       <li><a href="#debugging">Debugging: scenarios from the build</a></li>
+      <li><a href="#ppo">From GRPO to PPO: the diff</a></li>
     </ol>
   </div>
 
@@ -794,6 +795,99 @@ step 1200  reward +0.792  acc 0.80  fmt 0.82  kl 0.0001  ent 0.296</pre></div>
     <li><code>inner_epochs=2</code> <strong>(the paper's &mu;)</strong> &mdash; makes the clipped ratio
     do real work; the clip-fraction metric is meaningless with a single epoch (ratio &equiv; 1).</li>
   </ul>
+
+  <h2 id="ppo"><span class="num">12</span>From GRPO to PPO: the diff</h2>
+  <p>GRPO is just PPO with the value critic deleted and the group mean put in its place (the
+  <a href="rl-grpo-fundamentals.html#ppo-grpo">why is here</a>). Converting this code back the other
+  way is a good measure of how little separates them: <strong>add a critic, swap the group baseline
+  for GAE, and add a value-loss term.</strong> That's it &mdash; it reaches ~90% greedy accuracy on
+  the same <code>a+b</code> task. Below is everything that changes, and nothing that doesn't.</p>
+
+  <div class="note"><strong>Reused verbatim from the GRPO code:</strong> the rollout
+  (<code>generate</code>), the importance ratio <code>torch.exp(cur_logprobs - old_logprobs)</code>,
+  the clipped <code>torch.min</code> surrogate, the k3 KL, the entropy bonus, and the inner-epoch loop.
+  Only the <em>advantage</em> changes &mdash; and a critic comes along to produce it.</div>
+
+  <h3>1 &middot; The model grows a value head</h3>
+  <p><code>TinyGPT</code> becomes an actor-critic <code>TinyGPTAC</code>: the same transformer trunk,
+  plus a second linear head that predicts a scalar value <code>V(s_t)</code> per token.
+  <code>forward</code> now returns logits <em>and</em> values.</p>
+  <pre><code class="language-diff">  class TinyGPTAC(nn.Module):                          # was: TinyGPT
+      ...
+      self.head  = nn.Linear(d, vocab, bias=False)     # policy logits (unchanged)
++     self.vhead = nn.Linear(d, 1)                     # value / critic head
+  ...
+  def forward(self, idx):
+      ...
+-     return self.head(h)                              # GRPO: logits only
++     return self.head(h), self.vhead(h).squeeze(-1)   # PPO: logits AND per-token V(s_t)</code></pre>
+
+  <h3>2 &middot; Scoring returns values too</h3>
+  <p>The per-token scorer (<code>per_token_logprobs</code> in the walkthrough) still returns log-probs,
+  entropy, and the completion mask &mdash; it now also forwards the critic's values from the same
+  pass.</p>
+  <pre><code class="language-diff">  def completion_logprobs_values(model, seq, prompt_len):   # was: per_token_logprobs
+-     logits         = model(seq)
++     logits, values = model(seq)        # same forward pass now also yields values
+      logp = log_softmax(logits).gather(...)   # unchanged
+      ent  = entropy(logits)                   # unchanged
+-     return logp, ent, mask
++     return logp, ent, values, mask     # + per-token values</code></pre>
+
+  <h3>3 &middot; Group baseline &rarr; GAE (the real change)</h3>
+  <p>This is the heart of it. GRPO assigned <em>one</em> scalar advantage to an entire completion from
+  its group's mean. PPO computes a <em>per-token</em> advantage from the critic with Generalized
+  Advantage Estimation &mdash; lower variance and genuine temporal credit, at the price of a critic
+  that must itself be trained.</p>
+  <pre><code class="language-diff">- # GRPO: one scalar advantage per completion, centered on the group mean
+- grouped    = rewards.view(-1, group_size)
+- advantages = (grouped - grouped.mean(dim=1, keepdim=True)).view(-1)
++ # PPO: per-token advantage from the critic, via GAE
++ rew_tok = torch.zeros_like(mask)                       # put the terminal reward R on
++ for i in range(B):                                     #   each completion's LAST token
++     rew_tok[i, mask[i].nonzero().max()] = Rterm[i]
++ adv, returns = gae(rew_tok, values, mask, gamma, lam)
++ adv = adv - adv[mask].mean()                           # center only (no std-whitening)</code></pre>
+  <p>GAE itself is a short backward recurrence over the completion. With the toy task's terminal-only
+  reward and <code>gamma = lam = 1</code> it collapses to the simplest correct PPO advantage,
+  <code>A_t = R - V(s_t)</code>:</p>
+  <pre><code class="language-python">def gae(rewards, values, mask, gamma=1.0, lam=1.0):
+    B, T = values.shape
+    adv = torch.zeros_like(values)
+    last = torch.zeros(B, device=values.device)
+    for t in reversed(range(T)):
+        v_next = values[:, t + 1] if t + 1 &lt; T else 0.0
+        delta = rewards[:, t] + gamma * v_next - values[:, t]   # TD residual
+        last = delta + gamma * lam * last                       # discounted accumulation
+        adv[:, t] = last * mask[:, t]
+    return adv, adv + values   # advantages, returns (the critic's targets)</code></pre>
+
+  <h3>4 &middot; The loss gains a value term</h3>
+  <p>The policy loss is the <em>same</em> clipped surrogate, now fed GAE advantages. PPO adds a
+  mean-squared-error term that trains the critic toward the GAE returns.</p>
+  <pre><code class="language-diff">  policy_loss = -((surr - kl_beta*kl + alpha*ent) * mask).sum() / mask.sum()   # unchanged
++ value_loss  = (0.5 * (values - returns)**2 * mask).sum() / mask.sum()        # critic MSE
+- loss = policy_loss
++ loss = policy_loss + vf_coef * value_loss                                     # + critic term</code></pre>
+
+  <h3>What else moves</h3>
+  <ul class="mlist">
+    <li><strong>New configs:</strong> <code>gamma</code> and <code>lam</code> (GAE),
+    <code>vf_coef</code> (critic-loss weight), and often a value-clip plus a separate critic learning
+    rate.</li>
+    <li><strong>New metrics:</strong> <code>explained_var</code> &mdash; the critic's quality; near 1
+    is healthy, but at or below 0 the critic is useless and every advantage is noise (the classic PPO
+    failure GRPO sidesteps) &mdash; plus <code>vloss</code> and mean predicted value.</li>
+    <li><strong>Removed:</strong> the group-mean baseline and the zero-variance-group bookkeeping
+    &mdash; PPO has no groups, so a single sample per prompt is enough.</li>
+  </ul>
+
+  <div class="note"><strong>The trade-off.</strong> PPO buys lower-variance, per-token credit
+  assignment and works with one sample per prompt &mdash; but you now train, tune, and store a second
+  network whose quality gates everything downstream. GRPO trades that for simplicity and more
+  rollouts, leaning entirely on having enough in-group reward variance to learn. On this
+  sparse-discovery task, that group structure was actually the better <em>explorer</em>. The math
+  behind both is in <a href="rl-grpo-fundamentals.html#ppo-grpo">RL &amp; GRPO Fundamentals</a>.</div>
 
   <hr>
   <p>That's GRPO end to end: rollout, group-relative advantage, the clipped surrogate, and the KL and
