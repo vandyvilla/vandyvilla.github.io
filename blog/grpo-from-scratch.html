@@ -14,7 +14,7 @@
     --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
     --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
     --code-fg: #b3266b; --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
-    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da; --table-head: #f3f5f7;
     --term-bg: #0d1117; --term-fg: #d1d9e0; --maxw: 880px;
   }
   @media (prefers-color-scheme: dark) {
@@ -22,7 +22,7 @@
       --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
       --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
       --code-fg: #ff7bbf; --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
-      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff;
+      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff; --table-head: #161b22;
       --term-bg: #010409; --term-fg: #c9d1d9;
     }
   }
@@ -129,6 +129,23 @@
     background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 50%; }
   .scenarios .sym { display: block; font-weight: 650; margin-bottom: .2em; }
   .scenarios .lbl { font-weight: 650; }
+
+  /* key-insight callout */
+  .idea { background: var(--num-bg); border: 1px solid var(--num-bd);
+    border-left: 3px solid var(--accent); border-radius: 10px; padding: .9em 1.2em;
+    margin: 1.4em 0; font-size: .96rem; }
+  .idea strong { font-weight: 700; }
+
+  /* comparison table */
+  .tablewrap { overflow-x: auto; margin: 1.3em 0 1.6em;
+    border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; min-width: 600px; }
+  thead th { background: var(--table-head); text-align: left; font-weight: 650;
+    padding: 10px 14px; border-bottom: 2px solid var(--border); }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border-soft);
+    vertical-align: top; }
+  tbody td:first-child { font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
 
   /* terminal / output block */
   .term { background: var(--term-bg); color: var(--term-fg);
@@ -807,6 +824,52 @@ step 1200  reward +0.792  acc 0.80  fmt 0.82  kl 0.0001  ent 0.296</pre></div>
   (<code>generate</code>), the importance ratio <code>torch.exp(cur_logprobs - old_logprobs)</code>,
   the clipped <code>torch.min</code> surrogate, the k3 KL, the entropy bonus, and the inner-epoch loop.
   Only the <em>advantage</em> changes &mdash; and a critic comes along to produce it.</div>
+
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Aspect</th><th>GRPO</th><th>PPO</th></tr></thead>
+    <tbody>
+      <tr><td>Baseline</td>
+        <td>Group <strong>mean reward</strong> &mdash; estimated from a batch of sibling samples; no extra model.</td>
+        <td>Learned <strong>critic</strong> <code>V(s)</code> &mdash; a separate value network trained with the policy.</td></tr>
+      <tr><td>Advantage</td>
+        <td>One scalar per completion, <code>r &minus; mean(group)</code>, broadcast to every token.</td>
+        <td>Per-token, from the critic via <strong>GAE</strong>.</td></tr>
+      <tr><td>Variance reduction</td>
+        <td>Monte-Carlo, by averaging over the group &mdash; needs a large enough <code>G</code>.</td>
+        <td>Lower variance via the critic + GAE &mdash; per-token credit, even from one sample.</td></tr>
+      <tr><td>Extra loss</td>
+        <td>None &mdash; surrogate + KL &minus; entropy only.</td>
+        <td>Value MSE: <code>vf_coef * (V - returns)**2</code>.</td></tr>
+      <tr><td>Samples / prompt</td>
+        <td>Several (a group, <code>G &ge; 2</code>) &mdash; the baseline needs in-group variance.</td>
+        <td>One can suffice &mdash; the critic, not the group, is the baseline.</td></tr>
+      <tr><td>VRAM consumption</td>
+        <td>Lower &mdash; only the policy (plus a frozen reference) is held.</td>
+        <td>Higher &mdash; a second trainable critic, plus its gradients and optimizer state.</td></tr>
+      <tr><td>Compute overhead</td>
+        <td>Heavier sampling &mdash; <code>G</code> completions per prompt every step.</td>
+        <td>Extra critic forward/backward each step, but far fewer samples.</td></tr>
+      <tr><td>Infrastructure scalability</td>
+        <td>Simpler &mdash; one network to shard and serve; rollout parallelizes trivially.</td>
+        <td>Heavier &mdash; two networks to co-locate, train, and checkpoint in step.</td></tr>
+      <tr><td>Key risk</td>
+        <td><strong>Zero-variance groups</strong>: identical scores &rArr; advantage 0 &rArr; stall.</td>
+        <td><strong>A bad critic</strong>: low / negative explained variance &rArr; every advantage is noise.</td></tr>
+      <tr><td>Best use case</td>
+        <td>Sparse / outcome / verifiable rewards; simplicity and easy scale-out.</td>
+        <td>Dense / per-step rewards; sample efficiency when a good critic is trainable.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="idea"><strong>The one fundamental difference is the baseline.</strong> Both algorithms
+  feed their advantage into the <em>identical</em> clipped surrogate &mdash; they differ only in how
+  they estimate the <strong>baseline</strong> that advantage is measured against. GRPO gets it for free
+  from a group of sibling samples (their mean reward); PPO trains a separate <strong>critic</strong>
+  network to predict the value <code>V(s)</code> of each state. Every other row above &mdash; the extra
+  loss, the samples per prompt, the VRAM and compute, the failure modes &mdash; follows from that one
+  choice.</div>
 
   <h3>1 &middot; The model grows a value head</h3>
   <p><code>TinyGPT</code> becomes an actor-critic <code>TinyGPTAC</code>: the same transformer trunk,
