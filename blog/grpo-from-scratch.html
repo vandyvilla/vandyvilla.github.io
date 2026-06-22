@@ -117,6 +117,19 @@
     border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .96rem; }
   .note strong { font-weight: 700; }
 
+  /* debugging scenarios */
+  .scenarios { counter-reset: sc; list-style: none; padding: 0; margin: 1.4em 0; }
+  .scenarios > li { position: relative; padding: .9em 0 1em 2.9em; margin: 0;
+    border-bottom: 1px solid var(--border-soft); }
+  .scenarios > li:last-child { border-bottom: none; }
+  .scenarios > li::before { counter-increment: sc; content: counter(sc);
+    position: absolute; left: 0; top: .95em; width: 1.9em; height: 1.9em;
+    display: flex; align-items: center; justify-content: center;
+    font-size: .82em; font-weight: 700; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd); border-radius: 50%; }
+  .scenarios .sym { display: block; font-weight: 650; margin-bottom: .2em; }
+  .scenarios .lbl { font-weight: 650; }
+
   /* terminal / output block */
   .term { background: var(--term-bg); color: var(--term-fg);
     border-radius: 10px; padding: 14px 18px; overflow-x: auto; margin: 1.1em 0 1.4em;
@@ -192,6 +205,7 @@
       <li><a href="#trainstep">The GRPO training step</a></li>
       <li><a href="#loop">The training loop</a></li>
       <li><a href="#results">Results: reading the metrics</a></li>
+      <li><a href="#debugging">Debugging: scenarios from the build</a></li>
     </ol>
   </div>
 
@@ -691,6 +705,94 @@ step 1200  reward +0.792  acc 0.80  fmt 0.82  kl 0.0001  ent 0.296</pre></div>
     <li><strong>Advantage std, clip fraction, and gradient norm</strong> stay bounded &mdash; the
     trust region and gradient clipping are keeping each update stable. Mean response length holds
     steady, so there's no length-bias reward hacking.</li>
+  </ul>
+
+  <h2 id="debugging"><span class="num">11</span>Debugging: scenarios from the build</h2>
+  <p>Clean code and tidy curves make GRPO look easy; getting this notebook to actually learn was a
+  string of failures, each with a recognizable signature in the metrics. Here are seven &mdash; all
+  but one of which happened while building <em>this</em> notebook &mdash; paired with the symptom, the
+  cause, and the fix.</p>
+
+  <ol class="scenarios">
+    <li>
+      <span class="sym">Reward marches to its minimum; entropy crashes immediately.</span>
+      Almost always a <strong>sign error</strong> in the loss, advantage, or gradient. Our very first
+      run had <code>coef * (P - onehot)</code> instead of <code>coef * (onehot - P)</code> in a
+      hand-derived gradient &mdash; gradient <em>ascent</em> on the loss.
+      <span class="lbl">Diagnose:</span> check that the loss decreases on a frozen batch, or that the
+      log-prob of a known-good sample rises after one update. Deterministic movement toward the
+      worst-possible reward is the tell.
+    </li>
+    <li>
+      <span class="sym">Reward plateaus; entropy &asymp; 0; zero-variance groups climb; accuracy mediocre.</span>
+      Premature <strong>entropy collapse</strong>: the policy goes deterministic, every group's samples
+      become identical, advantages vanish, and learning stalls for good.
+      <span class="lbl">Fixes</span> (roughly by effectiveness): anneal an entropy bonus
+      high&rarr;low, raise the group size <code>G</code>, raise the rollout temperature, and decay the
+      learning rate so late updates stop crushing the distribution.
+    </li>
+    <li>
+      <span class="sym">Format / easy rewards get learned; correctness never improves.</span>
+      A <strong>sparse-reward local optimum</strong>. Our <code>+0.1</code> for any well-formed digit
+      made single digits a safe harbor, while the correct multi-token answer was a sampling lottery.
+      <span class="lbl">Fixes:</span> denser shaping (graded distance-to-answer credit), a curriculum
+      (easy prompts first), or an SFT warm-start so correct answers are already in-distribution. And
+      <strong>print the actual completions</strong> &mdash; our greedy-decode grid exposed in seconds
+      what the curves couldn't.
+    </li>
+    <li>
+      <span class="sym">Training thrashes despite plentiful signal; sampled accuracy oscillates wildly.</span>
+      <strong>Std-normalized advantages amplify noise</strong>: a group whose rewards differ by
+      <code>0.02</code> gets the same &plusmn;1 advantages as a group containing a genuine
+      breakthrough. <span class="lbl">Fix:</span> mean-center only (<code>norm_std=False</code>, the
+      Dr. GRPO fix &mdash; this took us from a 43% plateau to 80%), or clamp the std divisor.
+    </li>
+    <li>
+      <span class="sym">KL explodes / clip fraction spikes / grad norm spikes.</span>
+      The policy is <strong>running away</strong> &mdash; from the reference, or from the rollout
+      policy. <span class="lbl">Fixes:</span> lower the learning rate, raise <code>kl_beta</code>,
+      reduce <code>inner_epochs</code> (each extra epoch is more off-policy), and sync the reference
+      more often. An isolated clip-fraction spike often just marks an optimizer-state discontinuity
+      (e.g., resuming from a checkpoint with fresh Adam moments).
+    </li>
+    <li>
+      <span class="sym">Reward rises but true quality doesn't.</span>
+      <strong>Reward hacking.</strong> Track the reward against an <em>independent</em> eval and
+      against response length; if they diverge, the reward has an exploit.
+      <span class="lbl">Fixes:</span> patch the verifier, penalize the exploit (e.g., length
+      normalization), and read the highest-scoring rollouts by hand.
+    </li>
+    <li>
+      <span class="sym">Nothing learns at all; advantage std &asymp; 0 from step one.</span>
+      The reward gives <strong>no within-group contrast</strong> &mdash; every completion scores
+      identically (reward too sparse for the current policy, or a broken verifier returning a
+      constant). <span class="lbl">Fixes:</span> verify the reward on hand-written good/bad
+      completions, add shaping, start from an SFT checkpoint, or raise temperature / <code>G</code>
+      until groups contain variation.
+    </li>
+  </ol>
+
+  <div class="note"><strong>The recurring lesson:</strong> read the rollouts. Scenarios&nbsp;1, 3,
+  6, and 7 were all caught faster by printing actual completions than by staring at curves &mdash; the
+  scalar metrics hide sign errors, safe-harbor exploits, and reward hacks that ten sampled outputs
+  reveal at a glance.</div>
+
+  <h3>Four config choices that earned their keep</h3>
+  <p>Those scenarios are exactly why this notebook's defaults look the way they do. Four decisions did
+  the heavy lifting:</p>
+  <ul class="mlist">
+    <li><code>norm_std=False</code> <strong>(Dr. GRPO)</strong> &mdash; mean-center the advantages but
+    don't divide by the group std. Dividing by a tiny std turns a <code>0.02</code> reward difference
+    into &plusmn;1 advantages (noise amplification). This single change took our run from a 43%
+    plateau to 80%.</li>
+    <li><strong>Annealed entropy bonus</strong> (&alpha;: 0.08&nbsp;&rarr;&nbsp;0.003) &mdash; without
+    it the policy goes deterministic early, every group's samples become identical, group variance
+    hits zero, and the gradient vanishes permanently.</li>
+    <li><strong>Reference-policy sync every 150 steps</strong> &mdash; with a from-scratch policy,
+    anchoring the KL to the random initialization forever would fight learning. For RLHF on a
+    pretrained model you'd instead keep the reference fixed at the SFT checkpoint.</li>
+    <li><code>inner_epochs=2</code> <strong>(the paper's &mu;)</strong> &mdash; makes the clipped ratio
+    do real work; the clip-fraction metric is meaningless with a single epoch (ratio &equiv; 1).</li>
   </ul>
 
   <hr>
