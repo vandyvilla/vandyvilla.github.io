@@ -86,11 +86,6 @@
   .wcard-time { color: var(--muted); }
   .wcard-go { color: var(--accent); font-weight: 600; }
 
-  /* empty state */
-  .empty { border: 1px dashed var(--border); border-radius: 14px; padding: 1.6em 1.5em;
-    text-align: center; color: var(--muted); font-size: .96rem; }
-  .empty strong { display: block; color: var(--fg); font-size: 1.05rem; margin-bottom: .3em; }
-
   .note { background: var(--note-bg); border: 1px solid var(--note-bd);
     border-radius: 10px; padding: .9em 1.2em; margin: 1.6em 0; font-size: .97rem; }
   .note strong { font-weight: 700; }
@@ -115,7 +110,7 @@
     <span class="tag eval">Agent Evaluation</span>
     <span class="tag harness">Agent Harness</span>
     <span class="dot">&middot;</span><span>Started August 2026</span>
-    <span class="dot">&middot;</span><span id="post-count">0 posts</span>
+    <span class="dot">&middot;</span><span id="post-count">3 posts</span>
   </div>
 
   <p class="lead">Each entry is a single week's worth of digging into one idea, written up while it's
@@ -125,7 +120,7 @@
     <div class="legend-item">
       <span class="tag">Model Training</span>
       <p>Pretraining, fine-tuning, and RL alike &mdash; architectures, optimization tricks, and what
-      actually moves model quality, in the spirit of the <a href="grpo-series.html">GRPO series</a>.</p>
+      actually moves model quality. Starts with the <a href="grpo-series.html">GRPO series</a>.</p>
     </div>
     <div class="legend-item">
       <span class="tag eval">Agent Evaluation</span>
@@ -164,14 +159,22 @@
         </div>
       </a>
     -->
-    <div class="empty">
-      <strong>First post coming soon.</strong>
-      Check back for the first entry in the series.
-    </div>
+    <a class="wcard" href="grpo-series.html" data-domain="training">
+      <div class="wcard-head"><span class="tag">Model Training</span></div>
+      <h3>Understanding GRPO: A Three-Part Series</h3>
+      <p>Group Relative Policy Optimization from three angles &mdash; the RL math fundamentals, a
+      from-scratch code walkthrough, and a practical metrics-and-configs reference for real
+      training runs.</p>
+      <div class="wcard-meta">
+        <span class="wcard-time">June 2026 &middot; 3-part series</span>
+        <span class="wcard-go">Read &rarr;</span>
+      </div>
+    </a>
   </div>
 
   <div class="note"><strong>How this series works.</strong> No fixed order &mdash; read whichever
-  domain interests you. New post roughly once a week, whenever there's something worth writing up.</div>
+  domain interests you. New weekly entries land here as they're written, roughly once a week &mdash;
+  check back for Agent Evaluation and Agent Harness posts.</div>
 
   <div class="footer">
     Weekly Learning &middot; an ongoing series on model training &amp; quality, agent evaluation, and
