@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Learning &mdash; Xiaowei Li</title>
+<meta name="description" content="A running weekly series on model training &amp; quality, agent evaluation, and agent harness &mdash; short, focused write-ups, one topic at a time.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
+    --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
+    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --an-bg: #ecf8f1; --an-bd: #bfe3d0; --an-fg: #15734c;
+    --pur-bg: #f5edfb; --pur-bd: #ddc2f0; --pur-fg: #7d3fb0;
+    --maxw: 820px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+      --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
+      --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
+      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff;
+      --an-bg: #0e1f17; --an-bd: #285339; --an-fg: #56cf92;
+      --pur-bg: #241a2e; --pur-bd: #4a2d63; --pur-fg: #c98ef0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+          Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  p { margin: 0.85em 0; }
+  strong { font-weight: 650; }
+
+  .backlink { display: inline-block; margin: 0 0 1.6em; color: var(--muted);
+    font-size: .92rem; font-weight: 500; }
+  .backlink:hover { color: var(--accent); text-decoration: none; }
+  .doc-title { font-size: 2.4rem; line-height: 1.15; margin: 0 0 .15em; font-weight: 700;
+    letter-spacing: -0.02em; }
+  .doc-sub { color: var(--muted); font-size: 1.18rem; margin: 0 0 1.1em; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.8em;
+    display: flex; gap: .6em; flex-wrap: wrap; align-items: center; }
+  .meta .dot { opacity: .5; }
+  .tag { font-size: .76rem; font-weight: 600; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd);
+    border-radius: 999px; padding: .12em .7em; }
+  .tag.eval { color: var(--an-fg); background: var(--an-bg); border-color: var(--an-bd); }
+  .tag.harness { color: var(--pur-fg); background: var(--pur-bg); border-color: var(--pur-bd); }
+  .lead { font-size: 1.06rem; }
+
+  /* domain legend */
+  .legend { display: grid; gap: .7em; margin: 1.6em 0 2.2em; }
+  .legend-item { display: flex; gap: .8em; align-items: baseline; }
+  .legend-item .tag { flex: none; }
+  .legend-item p { margin: 0; color: var(--muted); font-size: .95rem; }
+
+  /* domain filter */
+  .filters { display: flex; gap: .5em; flex-wrap: wrap; margin: 0 0 1.6em; }
+  .filter-btn { font-size: .84rem; font-weight: 600; color: var(--muted);
+    background: var(--row-alt); border: 1px solid var(--border); border-radius: 999px;
+    padding: .4em 1em; cursor: pointer; transition: all .15s ease; }
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { color: var(--accent); background: var(--num-bg); border-color: var(--num-bd); }
+
+  /* post cards */
+  .series { display: grid; gap: 1.15em; margin: 1.2em 0; }
+  .wcard { display: block; position: relative; border: 1px solid var(--border);
+    border-radius: 14px; padding: 1.3em 1.5em; background: var(--row-alt);
+    text-decoration: none; color: inherit;
+    transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease; }
+  .wcard:hover { border-color: var(--accent); transform: translateY(-2px);
+    box-shadow: 0 6px 22px rgba(0,0,0,.08); text-decoration: none; }
+  .wcard-head { display: flex; align-items: center; gap: .6em; margin-bottom: .55em;
+    flex-wrap: wrap; }
+  .wcard h3 { margin: 0; font-size: 1.15rem; font-weight: 650; line-height: 1.3; }
+  .wcard p { margin: .5em 0 .8em; color: var(--muted); font-size: .96rem; }
+  .wcard-meta { display: flex; align-items: center; justify-content: space-between;
+    font-size: .88rem; }
+  .wcard-time { color: var(--muted); }
+  .wcard-go { color: var(--accent); font-weight: 600; }
+
+  /* empty state */
+  .empty { border: 1px dashed var(--border); border-radius: 14px; padding: 1.6em 1.5em;
+    text-align: center; color: var(--muted); font-size: .96rem; }
+  .empty strong { display: block; color: var(--fg); font-size: 1.05rem; margin-bottom: .3em; }
+
+  .note { background: var(--note-bg); border: 1px solid var(--note-bd);
+    border-radius: 10px; padding: .9em 1.2em; margin: 1.6em 0; font-size: .97rem; }
+  .note strong { font-weight: 700; }
+
+  .footer { margin-top: 3em; padding-top: 1.4em; border-top: 1px solid var(--border-soft);
+    color: var(--muted); font-size: .9rem; }
+  @media (max-width: 640px) {
+    .wrap { padding: 28px 16px 64px; }
+    .doc-title { font-size: 1.85rem; } .doc-sub { font-size: 1.05rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="../index.html#blog" class="backlink">&larr; Back to all posts</a>
+
+  <h1 class="doc-title">Weekly Learning</h1>
+  <p class="doc-sub">A running series of short, focused write-ups &mdash; one topic a week, each one
+  landing in model training &amp; quality, agent evaluation, or agent harness.</p>
+  <div class="meta">
+    <span class="tag">Model Training</span>
+    <span class="tag eval">Agent Evaluation</span>
+    <span class="tag harness">Agent Harness</span>
+    <span class="dot">&middot;</span><span>Started August 2026</span>
+    <span class="dot">&middot;</span><span id="post-count">0 posts</span>
+  </div>
+
+  <p class="lead">Each entry is a single week's worth of digging into one idea, written up while it's
+  still fresh. Every post is tagged with exactly one of three domains:</p>
+
+  <div class="legend">
+    <div class="legend-item">
+      <span class="tag">Model Training</span>
+      <p>Pretraining, fine-tuning, and RL alike &mdash; architectures, optimization tricks, and what
+      actually moves model quality, in the spirit of the <a href="grpo-series.html">GRPO series</a>.</p>
+    </div>
+    <div class="legend-item">
+      <span class="tag eval">Agent Evaluation</span>
+      <p>Building good agent evaluation benchmarks, simulation, synthetic data, and autoraters.</p>
+    </div>
+    <div class="legend-item">
+      <span class="tag harness">Agent Harness</span>
+      <p>The scaffolding around the model &mdash; context engineering, memory, tool orchestration,
+      and everything else that turns a model into an agent.</p>
+    </div>
+  </div>
+
+  <div class="filters" id="filters">
+    <button class="filter-btn active" data-filter="all">All</button>
+    <button class="filter-btn" data-filter="training">Model Training</button>
+    <button class="filter-btn" data-filter="eval">Agent Evaluation</button>
+    <button class="filter-btn" data-filter="harness">Agent Harness</button>
+  </div>
+
+  <div class="series" id="post-list">
+    <!--
+      New post checklist:
+      1. Copy weekly-post-template.html to a new file, e.g. 2026-09-05-your-topic.html
+      2. Fill in the placeholders and pick the one matching domain tag.
+      3. Add a .wcard entry here (copy the example below, uncomment, fill in) above this comment
+         block so newest posts stay on top.
+      4. Update #post-count above.
+
+      <a class="wcard" href="2026-09-05-your-topic.html" data-domain="training">
+        <div class="wcard-head"><span class="tag">Model Training</span></div>
+        <h3>Post title</h3>
+        <p>One or two sentence summary of what this post covers.</p>
+        <div class="wcard-meta">
+          <span class="wcard-time">Sept 5, 2026 &middot; ~8 min read</span>
+          <span class="wcard-go">Read &rarr;</span>
+        </div>
+      </a>
+    -->
+    <div class="empty">
+      <strong>First post coming soon.</strong>
+      Check back for the first entry in the series.
+    </div>
+  </div>
+
+  <div class="note"><strong>How this series works.</strong> No fixed order &mdash; read whichever
+  domain interests you. New post roughly once a week, whenever there's something worth writing up.</div>
+
+  <div class="footer">
+    Weekly Learning &middot; an ongoing series on model training &amp; quality, agent evaluation, and
+    agent harness.
+  </div>
+</div>
+<script>
+  document.getElementById('filters').addEventListener('click', function (e) {
+    var btn = e.target.closest('.filter-btn');
+    if (!btn) return;
+    document.querySelectorAll('.filter-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var filter = btn.dataset.filter;
+    document.querySelectorAll('#post-list .wcard').forEach(function (card) {
+      card.style.display = (filter === 'all' || card.dataset.domain === filter) ? '' : 'none';
+    });
+  });
+</script>
+</body>
+</html>

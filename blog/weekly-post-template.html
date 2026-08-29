@@ -1,0 +1,135 @@
+<!--
+  Weekly Learning post template.
+  1. Copy this file to a new name, e.g. 2026-09-05-your-topic.html
+  2. Replace every [BRACKETED] placeholder below.
+  3. Delete the two unused domain <span class="tag ..."> lines in .meta, keep exactly one.
+  4. Add a matching .wcard entry on weekly-learning.html (see the checklist comment there)
+     and update its #post-count.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>[POST TITLE] &mdash; Xiaowei Li</title>
+<meta name="description" content="[ONE-SENTENCE SUMMARY FOR SEARCH/SOCIAL PREVIEWS]">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --border: #d1d9e0;
+    --border-soft: #e4e8ec; --accent: #0969da; --code-bg: #f6f8fa;
+    --code-fg: #b3266b; --row-alt: #fafbfc; --note-bg: #fff8e6; --note-bd: #f0d999;
+    --num-bg: #eef3fb; --num-bd: #bcd2f0; --num-fg: #0969da;
+    --an-bg: #ecf8f1; --an-bd: #bfe3d0; --an-fg: #15734c;
+    --pur-bg: #f5edfb; --pur-bd: #ddc2f0; --pur-fg: #7d3fb0;
+    --table-head: #f3f5f7; --maxw: 820px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --border: #30363d;
+      --border-soft: #21262d; --accent: #4493f8; --code-bg: #161b22;
+      --code-fg: #ff7bbf; --row-alt: #11161d; --note-bg: #241c08; --note-bd: #5c4813;
+      --num-bg: #11203a; --num-bd: #1f487e; --num-fg: #6cb0ff; --table-head: #161b22;
+      --an-bg: #0e1f17; --an-bd: #285339; --an-fg: #56cf92;
+      --pur-bg: #241a2e; --pur-bd: #4a2d63; --pur-fg: #c98ef0;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 17px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+          Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 48px 24px 96px; }
+  h1, h2, h3 { line-height: 1.25; font-weight: 650; scroll-margin-top: 20px; }
+  h2 { font-size: 1.5rem; margin: 2.2em 0 0.5em; padding-bottom: .28em;
+    border-bottom: 1px solid var(--border-soft); }
+  h3 { font-size: 1.12rem; margin: 1.6em 0 0.3em; }
+  p { margin: 0.85em 0; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { font-weight: 650; }
+  code { background: var(--code-bg); color: var(--code-fg);
+    padding: .12em .38em; border-radius: 5px; font-size: .86em;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  pre { background: var(--code-bg); border: 1px solid var(--border-soft);
+    border-radius: 10px; padding: 14px 16px; overflow-x: auto; margin: 1.1em 0 1.4em;
+    font-size: .86rem; line-height: 1.55;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+  pre code { background: none; color: var(--fg); padding: 0; font-size: inherit; }
+  hr { border: none; border-top: 1px solid var(--border-soft); margin: 2.4em 0; }
+
+  .backlink { display: inline-block; margin: 0 0 1.6em; color: var(--muted);
+    font-size: .92rem; font-weight: 500; }
+  .backlink:hover { color: var(--accent); text-decoration: none; }
+  .doc-title { font-size: 2.2rem; line-height: 1.15; margin: 0 0 .15em; font-weight: 700;
+    letter-spacing: -0.02em; }
+  .doc-sub { color: var(--muted); font-size: 1.15rem; margin: 0 0 1.1em; }
+  .meta { color: var(--muted); font-size: .9rem; margin: 0 0 1.8em;
+    display: flex; gap: .6em; flex-wrap: wrap; align-items: center; }
+  .meta .dot { opacity: .5; }
+  .tag { font-size: .76rem; font-weight: 600; color: var(--num-fg);
+    background: var(--num-bg); border: 1px solid var(--num-bd);
+    border-radius: 999px; padding: .12em .7em; }
+  .tag.eval { color: var(--an-fg); background: var(--an-bg); border-color: var(--an-bd); }
+  .tag.harness { color: var(--pur-fg); background: var(--pur-bg); border-color: var(--pur-bd); }
+  .lead { font-size: 1.06rem; }
+
+  .note, .idea { border-radius: 10px; padding: .9em 1.2em; margin: 1.4em 0; font-size: .97rem; }
+  .note { background: var(--note-bg); border: 1px solid var(--note-bd); }
+  .idea { background: var(--num-bg); border: 1px solid var(--num-bd); border-left: 3px solid var(--accent); }
+  .note strong, .idea strong { font-weight: 700; }
+
+  .tablewrap { overflow-x: auto; margin: 1.2em 0 1.6em;
+    border: 1px solid var(--border); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; min-width: 480px; }
+  thead th { background: var(--table-head); text-align: left; font-weight: 650;
+    padding: 11px 14px; border-bottom: 2px solid var(--border); }
+  tbody td { padding: 11px 14px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .footer { margin-top: 3em; padding-top: 1.4em; border-top: 1px solid var(--border-soft);
+    color: var(--muted); font-size: .9rem; }
+  @media (max-width: 640px) {
+    .wrap { padding: 28px 16px 64px; }
+    .doc-title { font-size: 1.7rem; } .doc-sub { font-size: 1.02rem; }
+    h2 { font-size: 1.3rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="weekly-learning.html" class="backlink">&larr; Weekly Learning</a>
+
+  <h1 class="doc-title">[POST TITLE]</h1>
+  <p class="doc-sub">[ONE-LINE HOOK &mdash; what this post covers and why it's worth reading]</p>
+  <div class="meta">
+    <!-- keep exactly one of these three -->
+    <span class="tag">Model Training</span>
+    <span class="tag eval">Agent Evaluation</span>
+    <span class="tag harness">Agent Harness</span>
+    <span class="dot">&middot;</span><span>[MONTH DAY, YEAR]</span>
+    <span class="dot">&middot;</span><span>~[N] min read</span>
+  </div>
+
+  <p class="lead">[OPENING PARAGRAPH &mdash; what problem or question this week's post digs into.]</p>
+
+  <h2 id="section-1">[FIRST SECTION HEADING]</h2>
+  <p>[BODY]</p>
+
+  <div class="idea"><strong>Takeaway.</strong> [OPTIONAL CALLOUT FOR A KEY INSIGHT]</div>
+
+  <h2 id="section-2">[SECOND SECTION HEADING]</h2>
+  <p>[BODY]</p>
+
+  <hr>
+  <p>[CLOSING PARAGRAPH &mdash; what this connects to, or what's next.]</p>
+
+  <div class="footer">
+    Part of the <a href="weekly-learning.html">Weekly Learning</a> series.
+  </div>
+</div>
+</body>
+</html>
